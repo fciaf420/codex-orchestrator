@@ -14,6 +14,7 @@ When you're working with Claude Code and need parallel execution, investigation 
 - **Talk back**: Send follow-up messages mid-task to redirect or add context
 - **Run in parallel**: Spawn multiple agents investigating different parts of a codebase
 - **Capture results**: Grab output programmatically when agents finish
+- **One-shot mode**: Agents exit when done - no more stuck "running" status
 
 ## Requirements
 
@@ -45,20 +46,18 @@ sudo ln -sf "$(pwd)/bin/codex-agent" /usr/local/bin/codex-agent
 ## Quick Start
 
 ```bash
-# Start an agent
-codex-agent start "Review this codebase for security vulnerabilities" --map
+# Start an agent (one-shot mode - exits when done)
+codex-agent start "Review this codebase for security vulnerabilities" --map --one-shot
 
-# Check status
-codex-agent jobs
+# Check status with structured JSON
+codex-agent jobs --json
 
 # See what it's doing
 codex-agent capture <jobId>
 
-# Send a follow-up message
+# Interactive mode (can send follow-ups)
+codex-agent start "Help me refactor the user service"
 codex-agent send <jobId> "Focus on the authentication module"
-
-# Attach to watch live
-tmux attach -t codex-agent-<jobId>
 ```
 
 ## Commands
@@ -73,6 +72,7 @@ tmux attach -t codex-agent-<jobId>
 | `attach <id>` | Print tmux attach command |
 | `watch <id>` | Stream output updates |
 | `jobs` | List all jobs |
+| `jobs --json` | List jobs with structured metadata (tokens, files, summary) |
 | `sessions` | List active tmux sessions |
 | `kill <id>` | Terminate a running job |
 | `clean` | Remove jobs older than 7 days |
@@ -88,35 +88,72 @@ tmux attach -t codex-agent-<jobId>
 | `-f, --file <glob>` | Include files matching glob (repeatable) |
 | `-d, --dir <path>` | Working directory |
 | `--map` | Include codebase map (docs/CODEBASE_MAP.md) |
+| `--one-shot` | Non-interactive mode - agent exits when done |
 | `--strip-ansi` | Remove terminal control codes from output |
+| `--json` | Output JSON (jobs command only) |
 | `--dry-run` | Preview prompt without executing |
+
+## Jobs JSON Output
+
+Get structured job data with `jobs --json`:
+
+```json
+{
+  "id": "8abfab85",
+  "status": "completed",
+  "elapsed_ms": 14897,
+  "tokens": {
+    "input": 36581,
+    "output": 282,
+    "context_window": 258400,
+    "context_used_pct": 14.16
+  },
+  "files_modified": ["src/auth.ts", "src/types.ts"],
+  "summary": "Implemented the authentication flow..."
+}
+```
+
+Fields:
+- `tokens`: Input/output tokens and context window usage
+- `files_modified`: Files changed via apply_patch
+- `summary`: Agent's final response (truncated to 500 chars)
+
+## One-Shot vs Interactive Mode
+
+| Mode | Flag | Behavior |
+|------|------|----------|
+| Interactive (default) | none | Agent stays open for follow-ups, status may show "running" even when idle |
+| One-shot | `--one-shot` | Agent exits when done, status accurately shows "completed" |
+
+Use `--one-shot` for fire-and-forget tasks. Use interactive mode when you need to send follow-up messages.
 
 ## Examples
 
-### Parallel Investigation
+### Parallel Investigation (One-Shot)
 
 ```bash
 # Spawn multiple agents to investigate different areas
-codex-agent start "Audit authentication flow" -r high --map
-codex-agent start "Review database queries for N+1 issues" -r high --map
-codex-agent start "Check for XSS vulnerabilities in templates" -r high --map
+codex-agent start "Audit authentication flow" -r high --map --one-shot
+codex-agent start "Review database queries for N+1 issues" -r high --map --one-shot
+codex-agent start "Check for XSS vulnerabilities in templates" -r high --map --one-shot
 
-# Check on all of them
-codex-agent jobs
+# Check on all of them with structured output
+codex-agent jobs --json
 
-# Collect results as they finish
-codex-agent output <id1> --strip-ansi
-codex-agent output <id2> --strip-ansi
+# Results include tokens used, files modified, and summary
 ```
 
 ### Interactive Session
 
 ```bash
-# Start an agent
+# Start an agent (interactive mode)
 codex-agent start "Help me refactor the user service"
 
 # Watch it work
 codex-agent watch abc123
+
+# Send a follow-up
+codex-agent send abc123 "Also update the tests"
 
 # Or attach directly for full interaction
 tmux attach -t codex-agent-abc123
@@ -141,9 +178,11 @@ codex-agent start "Understand the architecture" --map -r high
 4. **It sends** your prompt to Codex
 5. **It returns** immediately with the job ID
 6. **Codex works** in the background
-7. **You check** with `capture`, `output`, or `attach`
+7. **You check** with `jobs --json`, `capture`, `output`, or `attach`
 
 All session output is logged via the `script` command, so you can retrieve results even after the session ends.
+
+Session metadata is parsed from Codex's JSONL files (`~/.codex/sessions/`) to extract tokens, file modifications, and summaries.
 
 ## Job Storage
 
@@ -153,15 +192,17 @@ Jobs are stored in `~/.codex-agent/jobs/`:
 ~/.codex-agent/jobs/
 ├── <jobId>.json    # Job metadata
 ├── <jobId>.prompt  # Original prompt
-└── <jobId>.log     # Full terminal output
+├── <jobId>.log     # Full terminal output
+└── <jobId>.result  # Clean output (one-shot mode only)
 ```
 
 ## Tips
 
-- Use `--strip-ansi` when capturing output programmatically - removes terminal noise
+- Use `--one-shot` for tasks that don't need follow-ups - agents exit cleanly
+- Use `jobs --json` to get structured data (tokens, files, summary) in one call
+- Use `--strip-ansi` when capturing output programmatically
 - Use `-r xhigh` for complex investigation tasks that need deep reasoning
 - Use `--map` to give agents codebase context (requires docs/CODEBASE_MAP.md)
-- Attach to sessions with `tmux attach` to interact directly
 - Kill stuck jobs with `codex-agent kill <id>`
 
 ## License
