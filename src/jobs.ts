@@ -24,6 +24,7 @@ export interface Job {
   model: string;
   reasoningEffort: ReasoningEffort;
   sandbox: SandboxMode;
+  parentSessionId?: string;
   oneShot?: boolean;
   cwd: string;
   createdAt: string;
@@ -206,6 +207,7 @@ export interface StartJobOptions {
   model?: string;
   reasoningEffort?: ReasoningEffort;
   sandbox?: SandboxMode;
+  parentSessionId?: string;
   oneShot?: boolean;
   cwd?: string;
 }
@@ -223,6 +225,7 @@ export function startJob(options: StartJobOptions): Job {
     model: options.model || config.model,
     reasoningEffort: options.reasoningEffort || config.defaultReasoningEffort,
     sandbox: options.sandbox || config.defaultSandbox,
+    parentSessionId: options.parentSessionId,
     oneShot: options.oneShot ?? false,
     cwd,
     createdAt: new Date().toISOString(),

@@ -46,6 +46,7 @@ Options:
   -s, --sandbox <mode>       Sandbox: read-only, workspace-write, danger-full-access
   -f, --file <glob>          Include files matching glob (can repeat)
   -d, --dir <path>           Working directory (default: cwd)
+  --parent-session <id>      Parent session ID for linkage
   --map                      Include codebase map if available
   --one-shot                 Run in non-interactive exec mode
   --dry-run                  Show prompt without executing
@@ -83,6 +84,7 @@ interface Options {
   files: string[];
   dir: string;
   includeMap: boolean;
+  parentSessionId: string | null;
   oneShot: boolean;
   dryRun: boolean;
   stripAnsi: boolean;
@@ -113,6 +115,7 @@ function parseArgs(args: string[]): {
     files: [],
     dir: process.cwd(),
     includeMap: false,
+    parentSessionId: null,
     oneShot: false,
     dryRun: false,
     stripAnsi: false,
@@ -152,6 +155,8 @@ function parseArgs(args: string[]): {
       options.files.push(args[++i]);
     } else if (arg === "-d" || arg === "--dir") {
       options.dir = args[++i];
+    } else if (arg === "--parent-session") {
+      options.parentSessionId = args[++i] ?? null;
     } else if (arg === "--map") {
       options.includeMap = true;
     } else if (arg === "--one-shot") {
@@ -290,6 +295,7 @@ async function main() {
           model: options.model,
           reasoningEffort: options.reasoning,
           sandbox: options.sandbox,
+          parentSessionId: options.parentSessionId ?? undefined,
           oneShot: options.oneShot,
           cwd: options.dir,
         });
@@ -566,6 +572,7 @@ async function main() {
             model: options.model,
             reasoningEffort: options.reasoning,
             sandbox: options.sandbox,
+            parentSessionId: options.parentSessionId ?? undefined,
             oneShot: options.oneShot,
             cwd: options.dir,
           });
