@@ -16,6 +16,9 @@ export const config = {
   // Job storage directory
   jobsDir: `${process.env.HOME}/.codex-agent/jobs`,
 
+  // Cached OAuth token location
+  authFile: `${process.env.HOME}/.codex-agent/auth.json`,
+
   // Default timeout in minutes
   defaultTimeout: 60,
 

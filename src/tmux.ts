@@ -52,6 +52,7 @@ export function createSession(options: {
   subagentReasoningEffort: string;
   sandbox: string;
   cwd: string;
+  authToken?: string;
 }): { sessionName: string; success: boolean; error?: string } {
   const sessionName = getSessionName(options.jobId);
   const logFile = `${config.jobsDir}/${options.jobId}.log`;
@@ -78,7 +79,10 @@ export function createSession(options: {
     // This allows us to capture the output even after completion
     // Create detached session that runs codex and stays open after it exits
     // Using script to log all terminal output
-    const shellCmd = `script -q "${logFile}" codex ${codexArgs}; echo "\\n\\n[codex-agent: Session complete. Press Enter to close.]"; read`;
+    const envPrefix = options.authToken
+      ? `env OPENAI_ACCESS_TOKEN='${options.authToken.replace(/'/g, "'\\''")}' `
+      : "";
+    const shellCmd = `script -q "${logFile}" ${envPrefix}codex ${codexArgs}; echo "\\n\\n[codex-agent: Session complete. Press Enter to close.]"; read`;
 
     execSync(
       `tmux new-session -d -s "${sessionName}" -c "${options.cwd}" '${shellCmd}'`,

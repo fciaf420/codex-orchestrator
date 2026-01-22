@@ -207,6 +207,7 @@ export interface StartJobOptions {
   sandbox?: SandboxMode;
   parentSessionId?: string;
   cwd?: string;
+  authToken?: string;
 }
 
 export function startJob(options: StartJobOptions): Job {
@@ -241,6 +242,7 @@ export function startJob(options: StartJobOptions): Job {
       job.subagentReasoningEffort || config.defaultSubagentReasoningEffort,
     sandbox: job.sandbox,
     cwd,
+    authToken: options.authToken,
   });
 
   if (result.success) {
