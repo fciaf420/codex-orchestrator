@@ -72,17 +72,43 @@ echo "  CLI:   ~/.local/bin/codex-agent"
 echo "  Skill: ~/.claude/commands/codex-agent/SKILL.md"
 echo ""
 
-# Check PATH
+# Add to PATH if needed
 if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-    echo "ACTION REQUIRED: Add ~/.local/bin to your PATH"
-    echo ""
-    echo "Add this to your ~/.bashrc or ~/.zshrc:"
-    echo '  export PATH="$HOME/.local/bin:$PATH"'
-    echo ""
-    echo "Then restart your terminal or run: source ~/.bashrc"
+    echo "Adding ~/.local/bin to PATH..."
+
+    # Detect shell config file
+    SHELL_CONFIG=""
+    if [ -n "$ZSH_VERSION" ] || [ -f "$HOME/.zshrc" ]; then
+        SHELL_CONFIG="$HOME/.zshrc"
+    elif [ -f "$HOME/.bashrc" ]; then
+        SHELL_CONFIG="$HOME/.bashrc"
+    elif [ -f "$HOME/.bash_profile" ]; then
+        SHELL_CONFIG="$HOME/.bash_profile"
+    fi
+
+    if [ -n "$SHELL_CONFIG" ]; then
+        # Check if already in config (avoid duplicates)
+        if ! grep -q 'export PATH="\$HOME/.local/bin:\$PATH"' "$SHELL_CONFIG" 2>/dev/null; then
+            echo '' >> "$SHELL_CONFIG"
+            echo '# Added by codex-orchestrator' >> "$SHELL_CONFIG"
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_CONFIG"
+            echo "  Added to $SHELL_CONFIG"
+        else
+            echo "  Already configured in $SHELL_CONFIG"
+        fi
+        echo ""
+        echo "Restart your terminal or run: source $SHELL_CONFIG"
+    else
+        echo "Could not detect shell config file."
+        echo "Manually add to your shell config:"
+        echo '  export PATH="$HOME/.local/bin:$PATH"'
+    fi
 else
-    echo "Run 'codex-agent health' to verify installation."
+    echo "~/.local/bin already in PATH"
 fi
+
+echo ""
+echo "Run 'codex-agent health' to verify installation."
 echo ""
 echo "Usage:"
 echo "  CLI:   codex-agent start \"your task\" --map"
