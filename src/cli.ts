@@ -22,6 +22,8 @@ import {
 } from "./jobs.ts";
 import { loadFiles, formatPromptWithFiles, estimateTokens, loadCodebaseMap } from "./files.ts";
 import { isTmuxAvailable, listSessions } from "./tmux.ts";
+import { closeSync, openSync, readSync, statSync } from "fs";
+import { join } from "path";
 
 const HELP = `
 Codex Agent - Delegate tasks to GPT Codex agents (tmux-based)
@@ -447,28 +449,79 @@ async function main() {
         console.error("For interactive mode, use: tmux attach -t " + job.tmuxSession);
         console.error("");
 
-        // Simple polling-based watch
-        let lastOutput = "";
-        const pollInterval = setInterval(() => {
-          const output = getJobOutput(positional[0], 100);
-          if (output && output !== lastOutput) {
-            // Print only new content
-            if (lastOutput) {
-              const newPart = output.replace(lastOutput, "");
-              if (newPart.trim()) {
-                process.stdout.write(newPart);
-              }
-            } else {
-              console.log(output);
-            }
-            lastOutput = output;
+        // Prefer tailing the log file to avoid repeated full captures.
+        const logFile = join(config.jobsDir, `${job.id}.log`);
+        let logFd: number | null = null;
+        let logOffset = 0;
+
+        const maybeOpenLog = () => {
+          if (logFd !== null) return;
+          try {
+            logFd = openSync(logFile, "r");
+            const stats = statSync(logFile);
+            logOffset = stats.size;
+          } catch {
+            logFd = null;
           }
+        };
+
+        const printDelta = (output: string | null, lastOutput: string) => {
+          if (!output || output === lastOutput) return { printed: false, next: lastOutput };
+          if (lastOutput && output.startsWith(lastOutput)) {
+            const newPart = output.slice(lastOutput.length);
+            if (newPart.trim()) {
+              process.stdout.write(newPart);
+              return { printed: true, next: output };
+            }
+            return { printed: false, next: output };
+          }
+          console.log(output);
+          return { printed: true, next: output };
+        };
+
+        // Emit an initial snapshot for context.
+        let lastOutput = "";
+        const initial = getJobOutput(positional[0], 100);
+        const initialPrinted = printDelta(initial, lastOutput);
+        lastOutput = initialPrinted.next;
+
+        const pollInterval = setInterval(() => {
+          maybeOpenLog();
+          if (logFd !== null) {
+            try {
+              const stats = statSync(logFile);
+              if (stats.size > logOffset) {
+                const length = stats.size - logOffset;
+                const buffer = Buffer.alloc(length);
+                const bytesRead = readSync(logFd, buffer, 0, length, logOffset);
+                logOffset += bytesRead;
+                const chunk = buffer.toString("utf-8", 0, bytesRead);
+                if (chunk.trim()) {
+                  process.stdout.write(chunk);
+                }
+                return;
+              }
+            } catch {
+              // Fall back to tmux capture if log tailing fails.
+              if (logFd !== null) {
+                closeSync(logFd);
+                logFd = null;
+              }
+            }
+          }
+
+          const output = getJobOutput(positional[0], 100);
+          const printed = printDelta(output, lastOutput);
+          lastOutput = printed.next;
 
           // Check if job is still running
           const refreshed = refreshJobStatus(positional[0]);
           if (refreshed && refreshed.status !== "running") {
             console.error(`\nJob ${refreshed.status}`);
             clearInterval(pollInterval);
+            if (logFd !== null) {
+              closeSync(logFd);
+            }
             process.exit(0);
           }
         }, 1000);
@@ -476,6 +529,9 @@ async function main() {
         // Handle Ctrl+C
         process.on("SIGINT", () => {
           clearInterval(pollInterval);
+          if (logFd !== null) {
+            closeSync(logFd);
+          }
           console.error("\nStopped watching");
           process.exit(0);
         });
