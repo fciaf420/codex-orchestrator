@@ -4,8 +4,8 @@
 $ErrorActionPreference = "Stop"
 
 $RepoDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$SkillSource = Join-Path $RepoDir ".claude\commands\codex-agent.md"
-$SkillDest = Join-Path $env:USERPROFILE ".claude\commands\codex-agent.md"
+$SkillSource = Join-Path $RepoDir ".claude\commands\codex-agent"
+$SkillDest = Join-Path $env:USERPROFILE ".claude\commands\codex-agent"
 $BinSource = Join-Path $RepoDir "bin"
 $BinName = "codex-agent"
 
@@ -67,14 +67,15 @@ bun run "$RepoDir\src\cli.ts" %*
 Set-Content -Path $BatchWrapper -Value $BatchContent -Encoding ASCII
 Write-Host "  Created $BatchWrapper" -ForegroundColor Green
 
-# Install Claude skill globally
+# Install Claude skill globally (folder structure)
 Write-Host ""
 Write-Host "Installing Claude skill..." -ForegroundColor Yellow
-$SkillDir = Join-Path $env:USERPROFILE ".claude\commands"
-if (-not (Test-Path $SkillDir)) {
-    New-Item -ItemType Directory -Path $SkillDir -Force | Out-Null
+$CommandsDir = Join-Path $env:USERPROFILE ".claude\commands"
+if (-not (Test-Path $CommandsDir)) {
+    New-Item -ItemType Directory -Path $CommandsDir -Force | Out-Null
 }
-Copy-Item -Path $SkillSource -Destination $SkillDest -Force
+if (Test-Path $SkillDest) { Remove-Item -Recurse -Force $SkillDest }
+Copy-Item -Path $SkillSource -Destination $SkillDest -Recurse
 Write-Host "  Installed to $SkillDest" -ForegroundColor Green
 
 Write-Host ""
@@ -82,7 +83,7 @@ Write-Host "Installation complete!" -ForegroundColor Green
 Write-Host ""
 Write-Host "Installed:" -ForegroundColor Cyan
 Write-Host "  CLI:   $BatchWrapper"
-Write-Host "  Skill: $SkillDest"
+Write-Host "  Skill: $SkillDest\SKILL.md"
 Write-Host ""
 Write-Host "Usage:" -ForegroundColor Cyan
 Write-Host "  CLI:   codex-agent start `"your task`" --map"

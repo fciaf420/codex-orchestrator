@@ -4,7 +4,7 @@
 $ErrorActionPreference = "Stop"
 
 $RepoDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$SkillDest = Join-Path $env:USERPROFILE ".claude\commands\codex-agent.md"
+$SkillDest = Join-Path $env:USERPROFILE ".claude\commands\codex-agent"
 $BinSource = Join-Path $RepoDir "bin"
 $BatchWrapper = Join-Path $BinSource "codex-agent.cmd"
 
@@ -25,10 +25,10 @@ if ($userPath -like "*$BinSource*") {
     [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
 }
 
-# Remove Claude skill
+# Remove Claude skill (folder)
 if (Test-Path $SkillDest) {
     Write-Host "Removing $SkillDest..." -ForegroundColor Yellow
-    Remove-Item -Path $SkillDest -Force
+    Remove-Item -Path $SkillDest -Recurse -Force
 }
 
 Write-Host ""

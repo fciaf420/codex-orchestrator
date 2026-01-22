@@ -2,8 +2,8 @@
 set -e
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
-SKILL_SOURCE="$REPO_DIR/.claude/commands/codex-agent.md"
-SKILL_DEST="$HOME/.claude/commands/codex-agent.md"
+SKILL_SOURCE="$REPO_DIR/.claude/commands/codex-agent"
+SKILL_DEST="$HOME/.claude/commands/codex-agent"
 BIN_SOURCE="$REPO_DIR/bin/codex-agent"
 BIN_DEST="/usr/local/bin/codex-agent"
 
@@ -50,17 +50,18 @@ else
     sudo ln -sf "$BIN_SOURCE" "$BIN_DEST"
 fi
 
-# Install Claude skill globally
+# Install Claude skill globally (folder structure)
 echo "Installing Claude skill to $SKILL_DEST..."
 mkdir -p "$HOME/.claude/commands"
-cp "$SKILL_SOURCE" "$SKILL_DEST"
+rm -rf "$SKILL_DEST"
+cp -r "$SKILL_SOURCE" "$SKILL_DEST"
 
 echo ""
 echo "Installation complete!"
 echo ""
 echo "Installed:"
 echo "  CLI:   $BIN_DEST"
-echo "  Skill: $SKILL_DEST"
+echo "  Skill: $SKILL_DEST/SKILL.md"
 echo ""
 echo "Usage:"
 echo "  CLI:   codex-agent start \"your task\" --map"

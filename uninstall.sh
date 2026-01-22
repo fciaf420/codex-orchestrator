@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-SKILL_DEST="$HOME/.claude/commands/codex-agent.md"
+SKILL_DEST="$HOME/.claude/commands/codex-agent"
 BIN_DEST="/usr/local/bin/codex-agent"
 
 echo "Uninstalling codex-orchestrator..."
@@ -16,10 +16,10 @@ if [ -L "$BIN_DEST" ] || [ -f "$BIN_DEST" ]; then
     fi
 fi
 
-# Remove Claude skill
-if [ -f "$SKILL_DEST" ]; then
+# Remove Claude skill (folder)
+if [ -d "$SKILL_DEST" ]; then
     echo "Removing $SKILL_DEST..."
-    rm -f "$SKILL_DEST"
+    rm -rf "$SKILL_DEST"
 fi
 
 echo ""
