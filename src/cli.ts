@@ -20,6 +20,7 @@ import {
   Job,
   getJobsJson,
 } from "./jobs.ts";
+import { resolveAuthToken } from "./auth.ts";
 import { loadFiles, formatPromptWithFiles, estimateTokens, loadCodebaseMap } from "./files.ts";
 import { isTmuxAvailable, listSessions } from "./tmux.ts";
 import { closeSync, openSync, readSync, statSync } from "fs";
@@ -300,6 +301,13 @@ async function main() {
           process.exit(0);
         }
 
+        const authToken = resolveAuthToken();
+        if (!authToken) {
+          console.error("Error: OpenAI OAuth token not found.");
+          console.error("Run: codex login");
+          process.exit(1);
+        }
+
         const job = startJob({
           prompt,
           model: options.model,
@@ -308,6 +316,7 @@ async function main() {
           sandbox: options.sandbox,
           parentSessionId: options.parentSessionId ?? undefined,
           cwd: options.dir,
+          authToken,
         });
 
         console.log(`Job started: ${job.id}`);
@@ -633,6 +642,13 @@ async function main() {
             process.exit(0);
           }
 
+          const authToken = resolveAuthToken();
+          if (!authToken) {
+            console.error("Error: OpenAI OAuth token not found.");
+            console.error("Run: codex login");
+            process.exit(1);
+          }
+
           const job = startJob({
             prompt,
             model: options.model,
@@ -641,6 +657,7 @@ async function main() {
             sandbox: options.sandbox,
             parentSessionId: options.parentSessionId ?? undefined,
             cwd: options.dir,
+            authToken,
           });
 
           console.log(`Job started: ${job.id}`);
