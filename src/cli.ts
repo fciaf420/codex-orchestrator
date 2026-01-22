@@ -42,6 +42,7 @@ Usage:
 
 Options:
   -r, --reasoning <level>    Reasoning effort: low, medium, high, xhigh (default: medium)
+  --subagent-reasoning <level>  Subagent reasoning effort: low, medium, high, xhigh (default: medium)
   -m, --model <model>        Model name (default: gpt-5.2-codex)
   -s, --sandbox <mode>       Sandbox: read-only, workspace-write, danger-full-access
   -f, --file <glob>          Include files matching glob (can repeat)
@@ -78,6 +79,7 @@ Bidirectional Communication:
 
 interface Options {
   reasoning: ReasoningEffort;
+  subagentReasoning: ReasoningEffort;
   model: string;
   sandbox: SandboxMode;
   files: string[];
@@ -108,6 +110,7 @@ function parseArgs(args: string[]): {
 } {
   const options: Options = {
     reasoning: config.defaultReasoningEffort,
+    subagentReasoning: config.defaultSubagentReasoningEffort,
     model: config.model,
     sandbox: config.defaultSandbox,
     files: [],
@@ -134,6 +137,15 @@ function parseArgs(args: string[]): {
         options.reasoning = level;
       } else {
         console.error(`Invalid reasoning level: ${level}`);
+        console.error(`Valid options: ${config.reasoningEfforts.join(", ")}`);
+        process.exit(1);
+      }
+    } else if (arg === "--subagent-reasoning") {
+      const level = args[++i] as ReasoningEffort;
+      if (config.reasoningEfforts.includes(level)) {
+        options.subagentReasoning = level;
+      } else {
+        console.error(`Invalid subagent reasoning level: ${level}`);
         console.error(`Valid options: ${config.reasoningEfforts.join(", ")}`);
         process.exit(1);
       }
@@ -276,6 +288,7 @@ async function main() {
           console.log(`Would send ~${tokens.toLocaleString()} tokens`);
           console.log(`Model: ${options.model}`);
           console.log(`Reasoning: ${options.reasoning}`);
+          console.log(`Subagent reasoning: ${options.subagentReasoning}`);
           console.log(`Sandbox: ${options.sandbox}`);
           console.log("\n--- Prompt Preview ---\n");
           console.log(prompt.slice(0, 3000));
@@ -289,13 +302,16 @@ async function main() {
           prompt,
           model: options.model,
           reasoningEffort: options.reasoning,
+          subagentReasoningEffort: options.subagentReasoning,
           sandbox: options.sandbox,
           parentSessionId: options.parentSessionId ?? undefined,
           cwd: options.dir,
         });
 
         console.log(`Job started: ${job.id}`);
-        console.log(`Model: ${job.model} (${job.reasoningEffort})`);
+        console.log(
+          `Model: ${job.model} (${job.reasoningEffort}, subagents: ${job.subagentReasoningEffort ?? config.defaultSubagentReasoningEffort})`
+        );
         console.log(`Working dir: ${job.cwd}`);
         console.log(`tmux session: ${job.tmuxSession}`);
         console.log("");
@@ -320,7 +336,9 @@ async function main() {
 
         console.log(`Job: ${job.id}`);
         console.log(`Status: ${job.status}`);
-        console.log(`Model: ${job.model} (${job.reasoningEffort})`);
+        console.log(
+          `Model: ${job.model} (${job.reasoningEffort}, subagents: ${job.subagentReasoningEffort ?? config.defaultSubagentReasoningEffort})`
+        );
         console.log(`Sandbox: ${job.sandbox}`);
         console.log(`Created: ${job.createdAt}`);
         if (job.startedAt) {
@@ -563,6 +581,7 @@ async function main() {
             prompt,
             model: options.model,
             reasoningEffort: options.reasoning,
+            subagentReasoningEffort: options.subagentReasoning,
             sandbox: options.sandbox,
             parentSessionId: options.parentSessionId ?? undefined,
             cwd: options.dir,

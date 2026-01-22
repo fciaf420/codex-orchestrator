@@ -7,6 +7,7 @@ export const config = {
   // Reasoning effort levels
   reasoningEfforts: ["low", "medium", "high", "xhigh"] as const,
   defaultReasoningEffort: "medium" as const,
+  defaultSubagentReasoningEffort: "medium" as const,
 
   // Sandbox modes
   sandboxModes: ["read-only", "workspace-write", "danger-full-access"] as const,

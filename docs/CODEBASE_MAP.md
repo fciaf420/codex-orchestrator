@@ -194,6 +194,7 @@ codex-agent/
 | Option | Description |
 |--------|-------------|
 | `-r, --reasoning` | low, medium, high, xhigh |
+| `--subagent-reasoning` | low, medium, high, xhigh |
 | `-m, --model` | Model name |
 | `-s, --sandbox` | read-only, workspace-write, danger-full-access |
 | `-f, --file` | Include files (glob, repeatable) |
