@@ -81,6 +81,7 @@ codex-agent send <jobId> "Focus on the authentication module instead"
 | Option | Description |
 |--------|-------------|
 | `-r, --reasoning <level>` | Reasoning effort: `low`, `medium`, `high`, `xhigh` |
+| `--subagent-reasoning <level>` | Subagent reasoning effort: `low`, `medium`, `high`, `xhigh` |
 | `-m, --model <model>` | Model name (default: gpt-5.2-codex) |
 | `-s, --sandbox <mode>` | `read-only`, `workspace-write`, `danger-full-access` |
 | `-f, --file <glob>` | Include files matching glob (repeatable) |
@@ -99,6 +100,7 @@ Get structured job data with `jobs --json`:
   "id": "8abfab85",
   "status": "completed",
   "elapsed_ms": 14897,
+  "subagent_reasoning": "medium",
   "tokens": {
     "input": 36581,
     "output": 282,
@@ -111,6 +113,7 @@ Get structured job data with `jobs --json`:
 ```
 
 Fields:
+- `subagent_reasoning`: Reasoning effort applied to child agents
 - `tokens`: Input/output tokens and context window usage
 - `files_modified`: Files changed via apply_patch
 - `summary`: Agent's final response (truncated to 500 chars)
@@ -189,6 +192,7 @@ Jobs are stored in `~/.codex-agent/jobs/`:
 - Use `-r xhigh` for complex investigation tasks that need deep reasoning
 - Use `--map` to give agents codebase context (requires docs/CODEBASE_MAP.md)
 - Use `-s read-only` for research tasks that shouldn't modify files
+- Use `--subagent-reasoning` when you want child agents to think less/more than the parent
 - Kill stuck jobs with `codex-agent kill <id>` only as a last resort
 
 ## License

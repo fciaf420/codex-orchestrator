@@ -49,6 +49,7 @@ export function createSession(options: {
   prompt: string;
   model: string;
   reasoningEffort: string;
+  subagentReasoningEffort: string;
   sandbox: string;
   cwd: string;
 }): { sessionName: string; success: boolean; error?: string } {
@@ -66,6 +67,7 @@ export function createSession(options: {
     const codexArgs = [
       `-c`, `model="${options.model}"`,
       `-c`, `model_reasoning_effort="${options.reasoningEffort}"`,
+      `-c`, `subagent_model_reasoning_effort="${options.subagentReasoningEffort}"`,
       `-c`, `skip_update_check=true`,
       `-a`, `never`,
       `-s`, options.sandbox,

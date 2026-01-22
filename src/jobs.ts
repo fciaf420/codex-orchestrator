@@ -23,6 +23,7 @@ export interface Job {
   prompt: string;
   model: string;
   reasoningEffort: ReasoningEffort;
+  subagentReasoningEffort?: ReasoningEffort;
   sandbox: SandboxMode;
   parentSessionId?: string;
   cwd: string;
@@ -115,6 +116,7 @@ export type JobsJsonEntry = {
   prompt: string;
   model: string;
   reasoning: ReasoningEffort;
+  subagent_reasoning: ReasoningEffort;
   cwd: string;
   elapsed_ms: number;
   created_at: string;
@@ -156,6 +158,8 @@ export function getJobsJson(): JobsJsonOutput {
       prompt: truncateText(effective.prompt, 100),
       model: effective.model,
       reasoning: effective.reasoningEffort,
+      subagent_reasoning:
+        effective.subagentReasoningEffort || config.defaultSubagentReasoningEffort,
       cwd: effective.cwd,
       elapsed_ms: elapsedMs,
       created_at: effective.createdAt,
@@ -199,6 +203,7 @@ export interface StartJobOptions {
   prompt: string;
   model?: string;
   reasoningEffort?: ReasoningEffort;
+  subagentReasoningEffort?: ReasoningEffort;
   sandbox?: SandboxMode;
   parentSessionId?: string;
   cwd?: string;
@@ -216,6 +221,8 @@ export function startJob(options: StartJobOptions): Job {
     prompt: options.prompt,
     model: options.model || config.model,
     reasoningEffort: options.reasoningEffort || config.defaultReasoningEffort,
+    subagentReasoningEffort:
+      options.subagentReasoningEffort || config.defaultSubagentReasoningEffort,
     sandbox: options.sandbox || config.defaultSandbox,
     parentSessionId: options.parentSessionId,
     cwd,
@@ -230,6 +237,8 @@ export function startJob(options: StartJobOptions): Job {
     prompt: options.prompt,
     model: job.model,
     reasoningEffort: job.reasoningEffort,
+    subagentReasoningEffort:
+      job.subagentReasoningEffort || config.defaultSubagentReasoningEffort,
     sandbox: job.sandbox,
     cwd,
   });
