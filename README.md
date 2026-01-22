@@ -14,6 +14,7 @@ When you're working with Claude Code and need parallel execution, investigation 
 - **Talk back**: Send follow-up messages mid-task to redirect or add context
 - **Run in parallel**: Spawn multiple agents investigating different parts of a codebase
 - **Capture results**: Grab output programmatically when agents finish
+- **Get structured data**: Extract tokens used, files modified, and summaries via JSON output
 
 ## Requirements
 
@@ -21,24 +22,49 @@ When you're working with Claude Code and need parallel execution, investigation 
 - [tmux](https://github.com/tmux/tmux) - Terminal multiplexer
 - [Codex CLI](https://github.com/openai/codex) - OpenAI's coding agent
 
+### macOS
+
 ```bash
-# macOS
 brew install tmux
 npm install -g @openai/codex
+curl -fsSL https://bun.sh/install | bash
+```
 
-# Verify
-codex --version
+### Linux
+
+```bash
+sudo apt-get install tmux
+npm install -g @openai/codex
+curl -fsSL https://bun.sh/install | bash
+```
+
+### Windows (via WSL)
+
+This tool requires tmux and the `script` command, which are Unix-only. On Windows, use WSL:
+
+```bash
+# In WSL (Ubuntu)
+sudo apt-get install tmux
+npm install -g @openai/codex
+curl -fsSL https://bun.sh/install | bash
+```
+
+### Verify Installation
+
+```bash
 tmux -V
+codex --version
+bun --version
 ```
 
 ## Install
 
 ```bash
-git clone https://github.com/kingbootoshi/codex-orchestrator.git
+git clone https://github.com/fciaf420/codex-orchestrator.git
 cd codex-orchestrator
 bun install
 
-# Add to PATH (optional)
+# Add to PATH (optional, Unix only)
 sudo ln -sf "$(pwd)/bin/codex-agent" /usr/local/bin/codex-agent
 ```
 
@@ -68,11 +94,12 @@ codex-agent send <jobId> "Focus on the authentication module instead"
 | `capture <id> [n]` | Get last n lines of output (default: 50) |
 | `output <id>` | Get full session output |
 | `attach <id>` | Print tmux attach command |
-| `watch <id>` | Stream output updates |
+| `watch <id>` | Stream output updates in real-time |
 | `jobs` | List all jobs |
 | `jobs --json` | List jobs with structured metadata (tokens, files, summary) |
 | `sessions` | List active tmux sessions |
 | `kill <id>` | Terminate a running job (last resort) |
+| `delete <id>` | Delete a specific job and its files |
 | `clean` | Remove jobs older than 7 days |
 | `health` | Check tmux and codex availability |
 
@@ -80,16 +107,17 @@ codex-agent send <jobId> "Focus on the authentication module instead"
 
 | Option | Description |
 |--------|-------------|
-| `-r, --reasoning <level>` | Reasoning effort: `low`, `medium`, `high`, `xhigh` |
+| `-r, --reasoning <level>` | Reasoning effort: `low`, `medium`, `high`, `xhigh` (default: medium) |
 | `--subagent-reasoning <level>` | Subagent reasoning effort: `low`, `medium`, `high`, `xhigh` |
 | `-m, --model <model>` | Model name (default: gpt-5.2-codex) |
-| `-s, --sandbox <mode>` | `read-only`, `workspace-write`, `danger-full-access` |
+| `-s, --sandbox <mode>` | `read-only`, `workspace-write`, `danger-full-access` (default: workspace-write) |
 | `-f, --file <glob>` | Include files matching glob (repeatable) |
 | `-d, --dir <path>` | Working directory |
+| `--parent-session <id>` | Link to parent session ID |
 | `--map` | Include codebase map (docs/CODEBASE_MAP.md) |
 | `--strip-ansi` | Remove terminal control codes from output |
 | `--json` | Output JSON (jobs command only) |
-| `--dry-run` | Preview prompt without executing |
+| `--dry-run` | Preview prompt and token estimate without executing |
 
 ## Jobs JSON Output
 
@@ -114,8 +142,8 @@ Get structured job data with `jobs --json`:
 
 Fields:
 - `subagent_reasoning`: Reasoning effort applied to child agents
-- `tokens`: Input/output tokens and context window usage
-- `files_modified`: Files changed via apply_patch
+- `tokens`: Input/output tokens and context window usage (parsed from Codex session files)
+- `files_modified`: Files changed via apply_patch tool calls
 - `summary`: Agent's final response (truncated to 500 chars)
 
 ## Examples
@@ -156,22 +184,61 @@ codex-agent start "Review these files for bugs" -f "src/auth/**/*.ts" -f "src/ap
 
 # Include codebase map for orientation
 codex-agent start "Understand the architecture" --map -r high
+
+# Preview what will be sent (dry run)
+codex-agent start "Complex task" -f "src/**/*.ts" --map --dry-run
+```
+
+### Streaming Output
+
+```bash
+# Watch output in real-time (polls every 1 second)
+codex-agent watch abc123
+
+# Capture recent output with ANSI codes stripped (for programmatic use)
+codex-agent capture abc123 100 --strip-ansi
 ```
 
 ## How It Works
 
 1. **You run** `codex-agent start "task"`
-2. **It creates** a detached tmux session
-3. **It launches** the Codex CLI inside that session
-4. **It sends** your prompt to Codex
+2. **It creates** a detached tmux session named `codex-agent-<jobId>`
+3. **It launches** the Codex CLI inside that session with `script` for output logging
+4. **It sends** your prompt to Codex (handles update prompts automatically)
 5. **It returns** immediately with the job ID
 6. **Codex works** in the background
 7. **You check** with `jobs --json`, `capture`, `output`, or `attach`
 8. **You redirect** with `send` if the agent needs course correction
 
-All session output is logged via the `script` command, so you can retrieve results even after the session ends.
+### Session Data Extraction
 
-Session metadata is parsed from Codex's JSONL files (`~/.codex/sessions/`) to extract tokens, file modifications, and summaries.
+When jobs complete, the tool parses Codex's JSONL session files (`~/.codex/sessions/`) to extract:
+- Token usage (input, output, context window percentage)
+- Files modified (from `apply_patch` tool calls)
+- Summary (last assistant message)
+
+This data is available via `jobs --json`.
+
+## Architecture
+
+```
+User Input (CLI) -> Job Management -> Session Control -> External Processes
+     |                  |                  |                   |
+  cli.ts           jobs.ts            tmux.ts         tmux + codex CLI
+                       |
+              session-parser.ts (extracts metadata from Codex sessions)
+```
+
+### Source Files
+
+| File | Purpose |
+|------|---------|
+| `src/cli.ts` | CLI commands, argument parsing, output formatting |
+| `src/jobs.ts` | Job lifecycle, persistence, status management |
+| `src/tmux.ts` | tmux session creation, messaging, output capture |
+| `src/session-parser.ts` | Parse Codex JSONL files for tokens/files/summary |
+| `src/config.ts` | Configuration constants and defaults |
+| `src/files.ts` | File loading for context injection, token estimation |
 
 ## Job Storage
 
@@ -179,10 +246,23 @@ Jobs are stored in `~/.codex-agent/jobs/`:
 
 ```
 ~/.codex-agent/jobs/
-├── <jobId>.json    # Job metadata
-├── <jobId>.prompt  # Original prompt
-└── <jobId>.log     # Full terminal output
+├── <jobId>.json    # Job metadata (status, model, timestamps, etc.)
+├── <jobId>.prompt  # Original prompt text
+└── <jobId>.log     # Full terminal output (via script command)
 ```
+
+## Configuration
+
+Default values in `src/config.ts`:
+
+| Setting | Default |
+|---------|---------|
+| Model | gpt-5.2-codex |
+| Reasoning effort | medium |
+| Subagent reasoning | medium |
+| Sandbox mode | workspace-write |
+| Jobs directory | ~/.codex-agent/jobs |
+| tmux prefix | codex-agent |
 
 ## Tips
 
@@ -193,7 +273,25 @@ Jobs are stored in `~/.codex-agent/jobs/`:
 - Use `--map` to give agents codebase context (requires docs/CODEBASE_MAP.md)
 - Use `-s read-only` for research tasks that shouldn't modify files
 - Use `--subagent-reasoning` when you want child agents to think less/more than the parent
+- Use `--dry-run` to preview prompts and estimate tokens before execution
+- Use `watch` for real-time output streaming instead of repeated `capture` calls
 - Kill stuck jobs with `codex-agent kill <id>` only as a last resort
+
+## Development
+
+```bash
+# Run directly
+bun run src/cli.ts --help
+
+# Or via shell wrapper
+./bin/codex-agent --help
+
+# Health check
+bun run src/cli.ts health
+
+# Build for distribution
+bun build src/cli.ts --outdir dist --target node
+```
 
 ## License
 
