@@ -6,6 +6,44 @@ Delegate tasks to OpenAI Codex agents via tmux sessions. Designed for Claude Cod
   <img src="codex-agent-hero.jpeg" alt="Claude orchestrating Codex agents" width="600">
 </p>
 
+## Install
+
+**macOS / Linux / WSL:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/fciaf420/codex-orchestrator/main/install-remote.sh | bash
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/fciaf420/codex-orchestrator/main/install-remote.ps1 | iex
+```
+
+This installs:
+- `codex-agent` CLI to `~/.local/bin/`
+- `/codex-agent` skill to `~/.claude/commands/`
+
+### Prerequisites
+
+Install these first:
+
+| Dependency | macOS | Linux/WSL | Windows |
+|------------|-------|-----------|---------|
+| Bun | `curl -fsSL https://bun.sh/install \| bash` | same | [bun.sh](https://bun.sh) |
+| tmux | `brew install tmux` | `apt install tmux` | N/A (WSL only) |
+| Codex CLI | `npm install -g @openai/codex` | same | same |
+
+### Uninstall
+
+```bash
+# Unix
+curl -fsSL https://raw.githubusercontent.com/fciaf420/codex-orchestrator/main/uninstall-remote.sh | bash
+
+# Windows
+irm https://raw.githubusercontent.com/fciaf420/codex-orchestrator/main/uninstall-remote.ps1 | iex
+```
+
+---
+
 ## Why?
 
 When you're working with Claude Code and need parallel execution, investigation tasks, or long-running operations - spawn Codex agents in the background. They run in tmux sessions so you can:
@@ -15,58 +53,6 @@ When you're working with Claude Code and need parallel execution, investigation 
 - **Run in parallel**: Spawn multiple agents investigating different parts of a codebase
 - **Capture results**: Grab output programmatically when agents finish
 - **Get structured data**: Extract tokens used, files modified, and summaries via JSON output
-
-## Requirements
-
-- [Bun](https://bun.sh) - JavaScript runtime
-- [tmux](https://github.com/tmux/tmux) - Terminal multiplexer
-- [Codex CLI](https://github.com/openai/codex) - OpenAI's coding agent
-
-### macOS
-
-```bash
-brew install tmux
-npm install -g @openai/codex
-curl -fsSL https://bun.sh/install | bash
-```
-
-### Linux
-
-```bash
-sudo apt-get install tmux
-npm install -g @openai/codex
-curl -fsSL https://bun.sh/install | bash
-```
-
-### Windows (via WSL)
-
-This tool requires tmux and the `script` command, which are Unix-only. On Windows, use WSL:
-
-```bash
-# In WSL (Ubuntu)
-sudo apt-get install tmux
-npm install -g @openai/codex
-curl -fsSL https://bun.sh/install | bash
-```
-
-### Verify Installation
-
-```bash
-tmux -V
-codex --version
-bun --version
-```
-
-## Install
-
-```bash
-git clone https://github.com/fciaf420/codex-orchestrator.git
-cd codex-orchestrator
-bun install
-
-# Add to PATH (optional, Unix only)
-sudo ln -sf "$(pwd)/bin/codex-agent" /usr/local/bin/codex-agent
-```
 
 ## Quick Start
 
