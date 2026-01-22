@@ -1,5 +1,9 @@
 // Configuration for codex-agent
 
+import { homedir } from "os";
+
+const homeDir = homedir();
+
 export const config = {
   // Default model
   model: "gpt-5.2-codex",
@@ -14,10 +18,10 @@ export const config = {
   defaultSandbox: "workspace-write" as const,
 
   // Job storage directory
-  jobsDir: `${process.env.HOME}/.codex-agent/jobs`,
+  jobsDir: `${homeDir}/.codex-agent/jobs`,
 
   // Cached OAuth token location
-  authFile: `${process.env.HOME}/.codex-agent/auth.json`,
+  authFile: `${homeDir}/.codex-agent/auth.json`,
 
   // Default timeout in minutes
   defaultTimeout: 60,

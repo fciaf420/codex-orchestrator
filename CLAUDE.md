@@ -42,6 +42,11 @@ bun run src/cli.ts health
 - Uses `script` command for output logging
 - Completion detected via marker string in output
 
+## Setup Notes
+
+- Native installation exists but `C:\Users\fciaf\.local\bin` is not in your PATH
+- Add it via System Properties -> Environment Variables -> Edit User PATH -> New -> add the path above, then restart your terminal
+
 ## Local Constraints
 
 - Use `trash` for file deletion, never `rm`

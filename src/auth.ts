@@ -1,6 +1,7 @@
 // OAuth credential management for Codex sessions
 
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { spawnSync } from "child_process";
 import { dirname, join } from "path";
 import { homedir } from "os";
 import { config } from "./config.ts";
@@ -12,6 +13,9 @@ type StoredAuth = {
 };
 
 const openAiAuthCandidates = [
+  // Codex CLI stores auth here
+  join(homedir(), ".codex", "auth.json"),
+  // Legacy OpenAI locations
   join(homedir(), ".config", "openai", "auth.json"),
   join(homedir(), ".config", "openai", "credentials.json"),
   join(homedir(), ".openai", "auth.json"),
@@ -21,6 +25,16 @@ const openAiAuthCandidates = [
 function parseTokenFromObject(data: unknown): string | null {
   if (!data || typeof data !== "object") return null;
   const record = data as Record<string, unknown>;
+
+  // Handle nested tokens object (Codex CLI format: { tokens: { access_token: "..." } })
+  if (record.tokens && typeof record.tokens === "object") {
+    const nested = record.tokens as Record<string, unknown>;
+    if (typeof nested.access_token === "string" && nested.access_token.trim()) {
+      return nested.access_token.trim();
+    }
+  }
+
+  // Handle flat format
   const tokenCandidates = [
     record.access_token,
     record.accessToken,
@@ -110,4 +124,21 @@ export function resolveAuthToken(): string | null {
   if (cachedToken) return cachedToken;
 
   return null;
+}
+
+export function ensureAuthToken(): string | null {
+  const existing = resolveAuthToken();
+  if (existing) return existing;
+
+  const login = spawnSync("codex", ["login"], { stdio: "inherit" });
+  if (login.error) {
+    console.error("Error: failed to run codex login:", login.error.message);
+    return null;
+  }
+  if (typeof login.status === "number" && login.status !== 0) {
+    console.error(`Error: codex login failed with exit code ${login.status}`);
+    return null;
+  }
+
+  return resolveAuthToken();
 }

@@ -22,10 +22,30 @@ export function getSessionName(jobId: string): string {
  */
 export function isTmuxAvailable(): boolean {
   try {
-    execSync("which tmux", { stdio: "pipe" });
+    if (process.platform === "win32") {
+      execSync("where tmux", { stdio: "pipe" });
+    } else {
+      execSync("which tmux", { stdio: "pipe" });
+    }
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Get an OS-appropriate tmux installation hint
+ */
+export function getTmuxInstallHint(): string {
+  switch (process.platform) {
+    case "win32":
+      return "Windows requires WSL or Docker for tmux (run codex-agent inside WSL).";
+    case "darwin":
+      return "Install with: brew install tmux";
+    case "linux":
+      return "Install with: sudo apt-get install tmux";
+    default:
+      return "Install tmux with your OS package manager.";
   }
 }
 
@@ -246,6 +266,10 @@ export function killSession(sessionName: string): boolean {
  * List all codex-agent sessions
  */
 export function listSessions(): TmuxSession[] {
+  if (process.platform === "win32") {
+    return [];
+  }
+
   try {
     const output = execSync(
       `tmux list-sessions -F "#{session_name}|#{session_attached}|#{session_windows}|#{session_created}" 2>/dev/null`,
