@@ -1,10 +1,12 @@
 // Job management for async codex agent execution with tmux
 
-import { mkdirSync, writeFileSync, readFileSync, readdirSync, unlinkSync } from "fs";
+import { mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "fs";
+import { spawn, spawnSync } from "child_process";
 import { join } from "path";
 import { config, ReasoningEffort, SandboxMode } from "./config.ts";
 import { randomBytes } from "crypto";
 import { extractSessionId, findSessionFile, parseSessionFile, type ParsedSessionData } from "./session-parser.ts";
+import { isValidJobId } from "./utils.ts";
 import {
   createSession,
   killSession,
@@ -31,8 +33,14 @@ export interface Job {
   startedAt?: string;
   completedAt?: string;
   tmuxSession?: string;
+  backend?: "tmux" | "native";
+  pid?: number;
   result?: string;
   error?: string;
+}
+
+function isWindows(): boolean {
+  return process.platform === "win32";
 }
 
 function ensureJobsDir(): void {
@@ -49,10 +57,11 @@ function getJobPath(jobId: string): string {
 
 export function saveJob(job: Job): void {
   ensureJobsDir();
-  writeFileSync(getJobPath(job.id), JSON.stringify(job, null, 2));
+  writeFileSync(getJobPath(job.id), JSON.stringify(job, null, 2), { mode: 0o600 });
 }
 
 export function loadJob(jobId: string): Job | null {
+  if (!isValidJobId(jobId)) return null;
   try {
     const content = readFileSync(getJobPath(jobId), "utf-8");
     return JSON.parse(content);
@@ -77,7 +86,8 @@ export function listJobs(): Job[] {
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
-function truncateText(value: string, maxLength: number): string {
+function truncateText(value: string | undefined | null, maxLength: number): string {
+  if (!value) return "";
   if (value.length <= maxLength) return value;
   return value.slice(0, maxLength);
 }
@@ -178,20 +188,49 @@ export function getJobsJson(): JobsJsonOutput {
 }
 
 export function deleteJob(jobId: string): boolean {
+  if (!isValidJobId(jobId)) return false;
   const job = loadJob(jobId);
 
   // Kill tmux session if running
   if (job?.tmuxSession && sessionExists(job.tmuxSession)) {
     killSession(job.tmuxSession);
   }
+  if (job?.backend === "native" && job.pid) {
+    killNativeProcess(job.pid);
+  }
 
   try {
     unlinkSync(getJobPath(jobId));
-    // Clean up prompt file if exists
+    // Clean up associated files if they exist
     try {
       unlinkSync(join(config.jobsDir, `${jobId}.prompt`));
     } catch {
       // Prompt file may not exist
+    }
+    try {
+      unlinkSync(join(config.jobsDir, `${jobId}.log`));
+    } catch {
+      // Log file may not exist
+    }
+    try {
+      unlinkSync(join(config.jobsDir, `${jobId}.runner.cjs`));
+    } catch {
+      // Runner file may not exist
+    }
+    try {
+      unlinkSync(join(config.jobsDir, `${jobId}.runner.json`));
+    } catch {
+      // Runner config may not exist
+    }
+    try {
+      unlinkSync(join(config.jobsDir, `${jobId}.ps1`));
+    } catch {
+      // Legacy script file may not exist
+    }
+    try {
+      unlinkSync(join(config.jobsDir, `${jobId}.done.json`));
+    } catch {
+      // Done file may not exist
     }
     return true;
   } catch {
@@ -208,6 +247,199 @@ export interface StartJobOptions {
   parentSessionId?: string;
   cwd?: string;
   authToken?: string;
+}
+
+function buildCodexArgs(options: {
+  model: string;
+  reasoningEffort: ReasoningEffort;
+  subagentReasoningEffort: ReasoningEffort;
+  sandbox: SandboxMode;
+}): string[] {
+  return [
+    "-c",
+    `model="${options.model}"`,
+    "-c",
+    `model_reasoning_effort="${options.reasoningEffort}"`,
+    "-c",
+    `subagent_model_reasoning_effort="${options.subagentReasoningEffort}"`,
+    "-c",
+    "skip_update_check=true",
+    "-a",
+    "never",
+    "-s",
+    options.sandbox,
+  ];
+}
+
+function buildExecArgs(options: {
+  model: string;
+  reasoningEffort: ReasoningEffort;
+  subagentReasoningEffort: ReasoningEffort;
+  sandbox: SandboxMode;
+}): string[] {
+  return [
+    "exec",
+    "--skip-git-repo-check",
+    "-c",
+    `model="${options.model}"`,
+    "-c",
+    `model_reasoning_effort="${options.reasoningEffort}"`,
+    "-c",
+    `subagent_model_reasoning_effort="${options.subagentReasoningEffort}"`,
+    "-c",
+    "skip_update_check=true",
+    "-s",
+    options.sandbox,
+    "--color",
+    "never",
+    "-",
+  ];
+}
+
+function startNativeSession(options: {
+  jobId: string;
+  prompt: string;
+  model: string;
+  reasoningEffort: ReasoningEffort;
+  subagentReasoningEffort: ReasoningEffort;
+  sandbox: SandboxMode;
+  cwd: string;
+  authToken?: string;
+}): { success: boolean; pid?: number; error?: string } {
+  const logFile = join(config.jobsDir, `${options.jobId}.log`);
+  const promptFile = join(config.jobsDir, `${options.jobId}.prompt`);
+  const runnerConfig = join(config.jobsDir, `${options.jobId}.runner.json`);
+  const runnerScript = join(config.jobsDir, `${options.jobId}.runner.cjs`);
+  const doneFile = join(config.jobsDir, `${options.jobId}.done.json`);
+
+  try {
+    writeFileSync(promptFile, options.prompt, { mode: 0o600 });
+    writeFileSync(logFile, "", { flag: "a", mode: 0o600 });
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
+  }
+
+  const args = buildExecArgs({
+    model: options.model,
+    reasoningEffort: options.reasoningEffort,
+    subagentReasoningEffort: options.subagentReasoningEffort,
+    sandbox: options.sandbox,
+  });
+
+  const env = {
+    ...process.env,
+    ...(options.authToken ? { OPENAI_ACCESS_TOKEN: options.authToken } : {}),
+  };
+
+  try {
+    const runnerConfigPayload = {
+      cwd: options.cwd,
+      promptFile,
+      logFile,
+      doneFile,
+      args,
+    };
+    writeFileSync(runnerConfig, JSON.stringify(runnerConfigPayload), { encoding: "utf-8", mode: 0o600 });
+
+    const runnerScriptContent = `
+const fs = require("fs");
+const { spawn } = require("child_process");
+
+const configPath = process.argv[2];
+if (!configPath) {
+  process.exit(1);
+}
+
+let config;
+try {
+  config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+} catch (err) {
+  process.exit(1);
+}
+
+try {
+  process.chdir(config.cwd);
+} catch {}
+
+const logStream = fs.createWriteStream(config.logFile, { flags: "a" });
+const logLine = (line) => {
+  try {
+    logStream.write(line);
+  } catch {}
+};
+
+let prompt = "";
+try {
+  prompt = fs.readFileSync(config.promptFile, "utf-8");
+} catch {}
+
+const child = spawn("codex", config.args, {
+  cwd: config.cwd,
+  env: process.env,
+  stdio: ["pipe", "pipe", "pipe"],
+  windowsHide: true,
+});
+
+child.stdout.on("data", (chunk) => logStream.write(chunk));
+child.stderr.on("data", (chunk) => logStream.write(chunk));
+child.on("error", (err) => {
+  logLine("[codex-agent] spawn error: " + err.message + "\\n");
+});
+
+if (child.stdin) {
+  child.stdin.write(prompt);
+  if (!prompt.endsWith("\\n")) child.stdin.write("\\n");
+  child.stdin.end();
+}
+
+child.on("exit", (code, signal) => {
+  logLine("\\n[codex-agent] exit code: " + String(code ?? "") + (signal ? " signal: " + signal : "") + "\\n");
+  try {
+    fs.writeFileSync(config.doneFile, JSON.stringify({ code, signal, at: new Date().toISOString() }));
+  } catch {}
+  logStream.end();
+});
+`;
+    writeFileSync(runnerScript, runnerScriptContent, { encoding: "utf-8", mode: 0o600 });
+
+    const child = spawn(process.execPath, [runnerScript, runnerConfig], {
+      cwd: options.cwd,
+      env,
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    });
+
+    child.unref();
+    return { success: true, pid: child.pid ?? undefined };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
+  }
+}
+
+function isPidRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function killNativeProcess(pid: number): boolean {
+  if (isWindows()) {
+    const result = spawnSync("taskkill", ["/PID", pid.toString(), "/T", "/F"], {
+      stdio: "ignore",
+    });
+    return result.status === 0;
+  }
+
+  try {
+    process.kill(pid);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function startJob(options: StartJobOptions): Job {
@@ -232,27 +464,55 @@ export function startJob(options: StartJobOptions): Job {
 
   saveJob(job);
 
-  // Create tmux session with codex
-  const result = createSession({
-    jobId,
-    prompt: options.prompt,
-    model: job.model,
-    reasoningEffort: job.reasoningEffort,
-    subagentReasoningEffort:
-      job.subagentReasoningEffort || config.defaultSubagentReasoningEffort,
-    sandbox: job.sandbox,
-    cwd,
-    authToken: options.authToken,
-  });
+  if (isWindows()) {
+    const result = startNativeSession({
+      jobId,
+      prompt: options.prompt,
+      model: job.model,
+      reasoningEffort: job.reasoningEffort,
+      subagentReasoningEffort:
+        job.subagentReasoningEffort || config.defaultSubagentReasoningEffort,
+      sandbox: job.sandbox,
+      cwd,
+      authToken: options.authToken,
+    });
 
-  if (result.success) {
-    job.status = "running";
-    job.startedAt = new Date().toISOString();
-    job.tmuxSession = result.sessionName;
+    if (result.success) {
+      job.status = "running";
+      job.startedAt = new Date().toISOString();
+      job.backend = "native";
+      job.pid = result.pid;
+    } else {
+      job.status = "failed";
+      job.backend = "native";
+      job.error = result.error || "Failed to start native session";
+      job.completedAt = new Date().toISOString();
+    }
   } else {
-    job.status = "failed";
-    job.error = result.error || "Failed to create tmux session";
-    job.completedAt = new Date().toISOString();
+    // Create tmux session with codex
+    const result = createSession({
+      jobId,
+      prompt: options.prompt,
+      model: job.model,
+      reasoningEffort: job.reasoningEffort,
+      subagentReasoningEffort:
+        job.subagentReasoningEffort || config.defaultSubagentReasoningEffort,
+      sandbox: job.sandbox,
+      cwd,
+      authToken: options.authToken,
+    });
+
+    if (result.success) {
+      job.status = "running";
+      job.startedAt = new Date().toISOString();
+      job.tmuxSession = result.sessionName;
+      job.backend = "tmux";
+    } else {
+      job.status = "failed";
+      job.backend = "tmux";
+      job.error = result.error || "Failed to create tmux session";
+      job.completedAt = new Date().toISOString();
+    }
   }
 
   saveJob(job);
@@ -260,11 +520,13 @@ export function startJob(options: StartJobOptions): Job {
 }
 
 export function killJob(jobId: string): boolean {
+  if (!isValidJobId(jobId)) return false;
   const job = loadJob(jobId);
   if (!job) return false;
 
-  // Kill tmux session
-  if (job.tmuxSession) {
+  if (job.backend === "native" && job.pid) {
+    killNativeProcess(job.pid);
+  } else if (job.tmuxSession) {
     killSession(job.tmuxSession);
   }
 
@@ -276,20 +538,23 @@ export function killJob(jobId: string): boolean {
 }
 
 export function sendToJob(jobId: string, message: string): boolean {
+  if (!isValidJobId(jobId)) return false;
   const job = loadJob(jobId);
-  if (!job || !job.tmuxSession) return false;
+  if (!job || job.backend === "native" || !job.tmuxSession) return false;
 
   return sendMessage(job.tmuxSession, message);
 }
 
 export function sendControlToJob(jobId: string, key: string): boolean {
+  if (!isValidJobId(jobId)) return false;
   const job = loadJob(jobId);
-  if (!job || !job.tmuxSession) return false;
+  if (!job || job.backend === "native" || !job.tmuxSession) return false;
 
   return sendControl(job.tmuxSession, key);
 }
 
 export function getJobOutput(jobId: string, lines?: number): string | null {
+  if (!isValidJobId(jobId)) return null;
   const job = loadJob(jobId);
   if (!job) return null;
 
@@ -314,6 +579,7 @@ export function getJobOutput(jobId: string, lines?: number): string | null {
 }
 
 export function getJobFullOutput(jobId: string): string | null {
+  if (!isValidJobId(jobId)) return null;
   const job = loadJob(jobId);
   if (!job) return null;
 
@@ -348,42 +614,67 @@ export function cleanupOldJobs(maxAgeDays: number = 7): number {
 }
 
 export function isJobRunning(jobId: string): boolean {
+  if (!isValidJobId(jobId)) return false;
   const job = loadJob(jobId);
-  if (!job || !job.tmuxSession) return false;
+  if (!job) return false;
+  if (job.backend === "native" && job.pid) {
+    return isPidRunning(job.pid);
+  }
+  if (!job.tmuxSession) return false;
 
   return isSessionActive(job.tmuxSession);
 }
 
 export function refreshJobStatus(jobId: string): Job | null {
+  if (!isValidJobId(jobId)) return null;
   const job = loadJob(jobId);
   if (!job) return null;
 
-  if (job.status === "running" && job.tmuxSession) {
-    // Check if tmux session still exists
-    if (!sessionExists(job.tmuxSession)) {
-      // Session ended completely
-      job.status = "completed";
-      job.completedAt = new Date().toISOString();
-      const logFile = join(config.jobsDir, `${jobId}.log`);
-      try {
-        job.result = readFileSync(logFile, "utf-8");
-      } catch {
-        // No log file
-      }
-      saveJob(job);
-    } else {
-      // Session exists - check if codex is still running
-      // Look for the "[codex-agent: Session complete" marker in output
-      const output = capturePane(job.tmuxSession, { lines: 20 });
-      if (output && output.includes("[codex-agent: Session complete")) {
+  if (job.status === "running") {
+    if (job.backend === "native") {
+      if (!job.pid) {
+        job.status = "failed";
+        job.error = "Native job missing PID";
+        job.completedAt = new Date().toISOString();
+        saveJob(job);
+      } else if (!isPidRunning(job.pid)) {
         job.status = "completed";
         job.completedAt = new Date().toISOString();
-        // Capture full output
-        const fullOutput = captureFullHistory(job.tmuxSession);
-        if (fullOutput) {
-          job.result = fullOutput;
+        const logFile = join(config.jobsDir, `${jobId}.log`);
+        try {
+          job.result = readFileSync(logFile, "utf-8");
+        } catch {
+          // No log file
         }
         saveJob(job);
+      }
+    } else if (job.tmuxSession) {
+      // Check if tmux session still exists
+      if (!sessionExists(job.tmuxSession)) {
+        // Session ended completely
+        job.status = "completed";
+        job.completedAt = new Date().toISOString();
+        const logFile = join(config.jobsDir, `${jobId}.log`);
+        try {
+          job.result = readFileSync(logFile, "utf-8");
+        } catch {
+          // No log file
+        }
+        saveJob(job);
+      } else {
+        // Session exists - check if codex is still running
+        // Look for the "[codex-agent: Session complete" marker in output
+        const output = capturePane(job.tmuxSession, { lines: 20 });
+        if (output && output.includes("[codex-agent: Session complete")) {
+          job.status = "completed";
+          job.completedAt = new Date().toISOString();
+          // Capture full output
+          const fullOutput = captureFullHistory(job.tmuxSession);
+          if (fullOutput) {
+            job.result = fullOutput;
+          }
+          saveJob(job);
+        }
       }
     }
   }
@@ -392,8 +683,16 @@ export function refreshJobStatus(jobId: string): Job | null {
 }
 
 export function getAttachCommand(jobId: string): string | null {
+  if (!isValidJobId(jobId)) return null;
   const job = loadJob(jobId);
-  if (!job || !job.tmuxSession) return null;
+  if (!job) return null;
 
+  if (job.backend === "native") {
+    const logFile = join(config.jobsDir, `${jobId}.log`);
+    const escaped = logFile.replace(/'/g, "''");
+    return `start powershell -NoExit -Command "Get-Content -Path '${escaped}' -Wait"`;
+  }
+
+  if (!job.tmuxSession) return null;
   return `tmux attach -t "${job.tmuxSession}"`;
 }

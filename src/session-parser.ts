@@ -1,6 +1,8 @@
 import { existsSync, readdirSync, readFileSync } from "fs";
 import type { Dirent } from "fs";
+import { homedir } from "os";
 import { extname, join } from "path";
+import { stripAnsiCodes } from "./utils.ts";
 
 export type SessionTokens = {
   input: number;
@@ -20,8 +22,9 @@ const SESSION_EXTENSIONS = new Set<string>([".jsonl", ".json"]);
 function getCodexHome(): string | null {
   const configured = process.env.CODEX_HOME;
   if (configured && configured.trim()) return configured;
-  if (!process.env.HOME) return null;
-  return join(process.env.HOME, ".codex");
+  const home = homedir();
+  if (!home) return null;
+  return join(home, ".codex");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -189,11 +192,6 @@ function parseJsonSession(content: string): ParsedSessionData | null {
     files_modified: [],
     summary,
   };
-}
-
-function stripAnsiCodes(text: string): string {
-  // Remove ANSI escape sequences
-  return text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/\[[\d;]*m/g, '');
 }
 
 export function extractSessionId(logContent: string): string | null {

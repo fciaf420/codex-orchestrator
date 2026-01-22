@@ -20,10 +20,11 @@ import {
   Job,
   getJobsJson,
 } from "./jobs.ts";
-import { resolveAuthToken } from "./auth.ts";
+import { ensureAuthToken } from "./auth.ts";
 import { loadFiles, formatPromptWithFiles, estimateTokens, loadCodebaseMap } from "./files.ts";
-import { isTmuxAvailable, listSessions } from "./tmux.ts";
-import { closeSync, openSync, readSync, statSync } from "fs";
+import { getTmuxInstallHint, isTmuxAvailable, listSessions } from "./tmux.ts";
+import { stripAnsiCodes } from "./utils.ts";
+import { closeSync, existsSync, openSync, readSync, statSync } from "fs";
 import { join } from "path";
 
 const HELP = `
@@ -94,18 +95,6 @@ interface Options {
   json: boolean;
 }
 
-function stripAnsiCodes(text: string): string {
-  return text
-    // Remove ANSI escape sequences (colors, cursor movements, etc)
-    .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
-    // Remove other escape sequences (OSC, etc)
-    .replace(/\x1b\][^\x07]*\x07/g, '')
-    // Remove carriage returns (used for spinner overwrites)
-    .replace(/\r/g, '')
-    // Remove other control characters except newline and tab
-    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '');
-}
-
 function parseArgs(args: string[]): {
   command: string;
   positional: string[];
@@ -153,7 +142,12 @@ function parseArgs(args: string[]): {
         process.exit(1);
       }
     } else if (arg === "-m" || arg === "--model") {
-      options.model = args[++i];
+      const model = args[++i];
+      if (!model || !model.trim()) {
+        console.error("Error: Model name cannot be empty");
+        process.exit(1);
+      }
+      options.model = model;
     } else if (arg === "-s" || arg === "--sandbox") {
       const mode = args[++i] as SandboxMode;
       if (config.sandboxModes.includes(mode)) {
@@ -166,7 +160,17 @@ function parseArgs(args: string[]): {
     } else if (arg === "-f" || arg === "--file") {
       options.files.push(args[++i]);
     } else if (arg === "-d" || arg === "--dir") {
-      options.dir = args[++i];
+      const dir = args[++i];
+      if (!existsSync(dir)) {
+        console.error(`Error: Directory does not exist: ${dir}`);
+        process.exit(1);
+      }
+      const dirStat = statSync(dir);
+      if (!dirStat.isDirectory()) {
+        console.error(`Error: Path is not a directory: ${dir}`);
+        process.exit(1);
+      }
+      options.dir = dir;
     } else if (arg === "--parent-session") {
       options.parentSessionId = args[++i] ?? null;
     } else if (arg === "--map") {
@@ -218,6 +222,7 @@ function formatJobStatus(job: Job): string {
 }
 
 async function main() {
+  const isWindows = process.platform === "win32";
   const args = process.argv.slice(2);
 
   if (args.length === 0) {
@@ -230,13 +235,17 @@ async function main() {
   try {
     switch (command) {
       case "health": {
-        // Check tmux
-        if (!isTmuxAvailable()) {
-          console.error("tmux not found");
-          console.error("Install with: brew install tmux");
-          process.exit(1);
+        if (isWindows) {
+          console.log("tmux: n/a (windows native mode)");
+        } else {
+          // Check tmux
+          if (!isTmuxAvailable()) {
+            console.error("tmux not found");
+            console.error(getTmuxInstallHint());
+            process.exit(1);
+          }
+          console.log("tmux: OK");
         }
-        console.log("tmux: OK");
 
         // Check codex
         const { execSync } = await import("child_process");
@@ -259,11 +268,13 @@ async function main() {
           process.exit(1);
         }
 
-        // Check tmux first
-        if (!isTmuxAvailable()) {
-          console.error("Error: tmux is required but not installed");
-          console.error("Install with: brew install tmux");
-          process.exit(1);
+        if (!isWindows) {
+          // Check tmux first
+          if (!isTmuxAvailable()) {
+            console.error("Error: tmux is required but not installed");
+            console.error(getTmuxInstallHint());
+            process.exit(1);
+          }
         }
 
         let prompt = positional.join(" ");
@@ -301,7 +312,7 @@ async function main() {
           process.exit(0);
         }
 
-        const authToken = resolveAuthToken();
+        const authToken = ensureAuthToken();
         if (!authToken) {
           console.error("Error: OpenAI OAuth token not found.");
           console.error("Run: codex login");
@@ -324,12 +335,19 @@ async function main() {
           `Model: ${job.model} (${job.reasoningEffort}, subagents: ${job.subagentReasoningEffort ?? config.defaultSubagentReasoningEffort})`
         );
         console.log(`Working dir: ${job.cwd}`);
-        console.log(`tmux session: ${job.tmuxSession}`);
+        if (job.tmuxSession) {
+          console.log(`tmux session: ${job.tmuxSession}`);
+        }
         console.log("");
         console.log("Commands:");
         console.log(`  Capture output:  codex-agent capture ${job.id}`);
-        console.log(`  Send message:    codex-agent send ${job.id} "message"`);
-        console.log(`  Attach session:  tmux attach -t ${job.tmuxSession}`);
+        if (job.backend !== "native") {
+          console.log(`  Send message:    codex-agent send ${job.id} "message"`);
+        }
+        const attachCmd = getAttachCommand(job.id);
+        if (attachCmd) {
+          console.log(`  Attach session:  ${attachCmd}`);
+        }
         break;
       }
 
@@ -375,6 +393,12 @@ async function main() {
 
         const jobId = positional[0];
         const message = positional.slice(1).join(" ");
+        const job = loadJob(jobId);
+        if (job?.backend === "native") {
+          console.error("Send is not supported in Windows native mode.");
+          console.error("Use WSL/Docker for interactive sessions.");
+          process.exit(1);
+        }
 
         if (sendToJob(jobId, message)) {
           console.log(`Sent to ${jobId}: ${message}`);
@@ -392,7 +416,16 @@ async function main() {
           process.exit(1);
         }
 
-        const lines = positional[1] ? parseInt(positional[1], 10) : 50;
+        let lines = 50;
+        if (positional[1]) {
+          const parsed = parseInt(positional[1], 10);
+          if (Number.isNaN(parsed) || parsed <= 0) {
+            console.error(`Error: Invalid line count: ${positional[1]}`);
+            console.error("Line count must be a positive integer");
+            process.exit(1);
+          }
+          lines = parsed;
+        }
         let output = getJobOutput(positional[0], lines);
 
         if (output) {
@@ -455,7 +488,10 @@ async function main() {
         }
 
         console.error(`Watching ${job.tmuxSession}... (Ctrl+C to stop)`);
-        console.error("For interactive mode, use: tmux attach -t " + job.tmuxSession);
+        const attachCmd = getAttachCommand(job.id);
+        if (attachCmd) {
+          console.error("For interactive mode, use: " + attachCmd);
+        }
         console.error("");
 
         // Prefer tailing the log file to avoid repeated full captures.
@@ -561,11 +597,11 @@ async function main() {
           console.log("ID        STATUS      ELAPSED   EFFORT  PROMPT");
           console.log("-".repeat(80));
           for (const job of jobs) {
-            // Refresh running jobs
-            if (job.status === "running") {
-              refreshJobStatus(job.id);
-            }
-            console.log(formatJobStatus(job));
+            // Refresh running jobs and use the updated status
+            const displayJob = job.status === "running"
+              ? refreshJobStatus(job.id) ?? job
+              : job;
+            console.log(formatJobStatus(displayJob));
           }
         }
         break;
@@ -628,10 +664,12 @@ async function main() {
         // Treat as prompt for start command
         if (command) {
           // Check tmux first
-          if (!isTmuxAvailable()) {
-            console.error("Error: tmux is required but not installed");
-            console.error("Install with: brew install tmux");
-            process.exit(1);
+          if (!isWindows) {
+            if (!isTmuxAvailable()) {
+              console.error("Error: tmux is required but not installed");
+              console.error(getTmuxInstallHint());
+              process.exit(1);
+            }
           }
 
           const prompt = [command, ...positional].join(" ");
@@ -642,7 +680,7 @@ async function main() {
             process.exit(0);
           }
 
-          const authToken = resolveAuthToken();
+          const authToken = ensureAuthToken();
           if (!authToken) {
             console.error("Error: OpenAI OAuth token not found.");
             console.error("Run: codex login");
@@ -661,8 +699,13 @@ async function main() {
           });
 
           console.log(`Job started: ${job.id}`);
-          console.log(`tmux session: ${job.tmuxSession}`);
-          console.log(`Attach: tmux attach -t ${job.tmuxSession}`);
+          if (job.tmuxSession) {
+            console.log(`tmux session: ${job.tmuxSession}`);
+          }
+          const attachCmd = getAttachCommand(job.id);
+          if (attachCmd) {
+            console.log(`Attach: ${attachCmd}`);
+          }
         } else {
           console.log(HELP);
         }

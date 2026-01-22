@@ -13,20 +13,15 @@ export async function loadFiles(
   patterns: string[],
   baseDir: string = process.cwd()
 ): Promise<FileContent[]> {
-  const files: FileContent[] = [];
+  // Separate positive and negation patterns
+  const positivePatterns = patterns.filter((p) => !p.startsWith("!"));
+  const negationPatterns = patterns.filter((p) => p.startsWith("!")).map((p) => p.slice(1));
+
+  // Collect all files matching positive patterns
   const seen = new Set<string>();
+  const fileMap = new Map<string, FileContent>();
 
-  for (const pattern of patterns) {
-    // Handle negation patterns
-    if (pattern.startsWith("!")) {
-      const negPattern = pattern.slice(1);
-      const matches = await glob(negPattern, { cwd: baseDir, absolute: true });
-      for (const match of matches) {
-        seen.delete(match);
-      }
-      continue;
-    }
-
+  for (const pattern of positivePatterns) {
     const matches = await glob(pattern, { cwd: baseDir, absolute: true });
 
     for (const match of matches) {
@@ -45,7 +40,7 @@ export async function loadFiles(
         if (content.includes("\0")) continue;
 
         seen.add(match);
-        files.push({
+        fileMap.set(match, {
           path: relative(baseDir, match),
           content,
         });
@@ -55,7 +50,15 @@ export async function loadFiles(
     }
   }
 
-  return files;
+  // Apply negation patterns to filter out excluded files
+  for (const negPattern of negationPatterns) {
+    const excludeMatches = await glob(negPattern, { cwd: baseDir, absolute: true });
+    for (const match of excludeMatches) {
+      fileMap.delete(match);
+    }
+  }
+
+  return Array.from(fileMap.values());
 }
 
 export function estimateTokens(text: string): number {
