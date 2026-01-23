@@ -15,12 +15,25 @@ echo ""
 # Check dependencies
 echo "Checking dependencies..."
 
-if ! command -v bun &> /dev/null; then
-    echo "Error: Bun is required but not installed."
-    echo "Install with: curl -fsSL https://bun.sh/install | bash"
+# Check for bun (with fallback to common install locations)
+BUN_CMD=""
+if command -v bun &> /dev/null; then
+    BUN_CMD="bun"
+    echo "  bun: $(bun --version)"
+elif [ -x "$HOME/.bun/bin/bun" ]; then
+    BUN_CMD="$HOME/.bun/bin/bun"
+    export PATH="$HOME/.bun/bin:$PATH"
+    echo "  bun: $($BUN_CMD --version) (found at ~/.bun/bin, added to PATH)"
+elif [ -n "$BUN_INSTALL" ] && [ -x "$BUN_INSTALL/bin/bun" ]; then
+    BUN_CMD="$BUN_INSTALL/bin/bun"
+    export PATH="$BUN_INSTALL/bin:$PATH"
+    echo "  bun: $($BUN_CMD --version) (found at \$BUN_INSTALL/bin, added to PATH)"
+else
+    echo "  bun: NOT FOUND"
+    echo "  Install with: curl -fsSL https://bun.sh/install | bash"
+    echo "  Then restart your terminal and try again"
     exit 1
 fi
-echo "  bun: OK"
 
 if ! command -v tmux &> /dev/null; then
     echo "  tmux: NOT FOUND (required for Unix)"
@@ -41,7 +54,7 @@ echo ""
 # Install npm dependencies
 echo "Installing dependencies..."
 cd "$REPO_DIR"
-bun install --silent
+$BUN_CMD install --silent
 
 # Create bin directory if needed
 mkdir -p "$HOME/.local/bin"
