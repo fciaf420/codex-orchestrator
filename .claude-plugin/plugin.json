@@ -1,0 +1,8 @@
+{
+  "name": "codex-orchestrator",
+  "description": "Delegate tasks to OpenAI Codex agents via tmux sessions. Designed for Claude Code orchestration.",
+  "author": {
+    "name": "fciaf420"
+  },
+  "repository": "https://github.com/fciaf420/codex-orchestrator"
+}

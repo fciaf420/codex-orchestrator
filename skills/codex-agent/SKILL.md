@@ -1,9 +1,31 @@
 ---
 name: codex-agent
 description: Delegates tasks to GPT Codex agents via tmux sessions. Supports single agents and multi-agent orchestration for parallel work, long-running tasks, code review, security audits, or implementation. Use when spawning background agents, running tasks in parallel, delegating to Codex, or any request that benefits from parallel AI execution. Trigger phrases include "spawn an agent", "run in background", "use codex", "parallel agents", "delegate to codex".
+allowed-tools: Bash(codex-agent:*), Bash(bun:*), Bash(tmux:*)
 ---
 
 # Codex Agent Orchestrator
+
+## Setup Required
+
+After installing this plugin, you must manually install the CLI tool:
+
+**macOS / Linux / WSL:**
+```bash
+cd ~/.claude/plugins/codex-orchestrator && ./install.sh
+```
+
+**Windows (PowerShell):**
+```powershell
+cd $env:USERPROFILE\.claude\plugins\codex-orchestrator; .\install.ps1
+```
+
+**Verify installation:**
+```bash
+codex-agent health
+```
+
+---
 
 $ARGUMENTS
 
