@@ -19,6 +19,10 @@ import {
   getAttachCommand,
   Job,
   getJobsJson,
+  getJobResult,
+  waitForJob,
+  startJobAndWait,
+  getJobProgress,
 } from "./jobs.ts";
 import { ensureAuthToken } from "./auth.ts";
 import { loadFiles, formatPromptWithFiles, estimateTokens, loadCodebaseMap } from "./files.ts";
@@ -32,7 +36,11 @@ Codex Agent - Delegate tasks to GPT Codex agents (tmux-based)
 
 Usage:
   codex-agent start "prompt" [options]   Start agent in tmux session
+  codex-agent run "prompt" [options]     Start agent and wait for completion
   codex-agent status <jobId>             Check job status
+  codex-agent result <jobId>             Get structured result (JSON)
+  codex-agent progress <jobId>           Get current progress and findings
+  codex-agent wait <jobId> [timeout]     Wait for job to complete (default: 300s)
   codex-agent send <jobId> "message"     Send message to running agent
   codex-agent capture <jobId> [lines]    Capture recent output (default: 50 lines)
   codex-agent output <jobId>             Get full session output
@@ -52,33 +60,36 @@ Options:
   -f, --file <glob>          Include files matching glob (can repeat)
   -d, --dir <path>           Working directory (default: cwd)
   --parent-session <id>      Parent session ID for linkage
+  --protocol                 Enable orchestration protocol (status events, structured output)
+  --timeout <seconds>        Timeout for wait/run commands (default: 300)
   --map                      Include codebase map if available
   --dry-run                  Show prompt without executing
   --strip-ansi               Remove ANSI escape codes from output (for capture/output)
-  --json                     Output JSON (jobs command only)
+  --json                     Output JSON (jobs, result commands)
   -h, --help                 Show this help
 
 Examples:
-  # Start an agent
-  codex-agent start "Review this code for security issues" -f "src/**/*.ts"
+  # Start an agent with protocol (for orchestration)
+  codex-agent start "Review this code for security issues" -f "src/**/*.ts" --protocol
 
-  # Check on it
-  codex-agent capture abc123
+  # Start and wait for completion
+  codex-agent run "Fix the bug in auth.ts" --timeout 600
 
-  # Send additional context
-  codex-agent send abc123 "Also check the auth module"
+  # Get structured result
+  codex-agent result abc123
 
-  # Attach to watch interactively
-  tmux attach -t codex-agent-abc123
+  # Check progress
+  codex-agent progress abc123
 
-  # Or use the attach command
-  codex-agent attach abc123
+  # Wait for a running job
+  codex-agent wait abc123 120
 
-Bidirectional Communication:
-  - Use 'send' to give agents additional instructions mid-task
-  - Use 'capture' to see recent output programmatically
-  - Use 'attach' to interact directly in tmux
-  - Press Ctrl+C in tmux to interrupt, type to continue conversation
+Orchestration Protocol:
+  - Use --protocol flag to enable structured communication
+  - Agents emit status events: [CODEX-AGENT:STATUS:analyzing]
+  - Agents emit findings: [CODEX-AGENT:FINDING:{"severity":"high",...}]
+  - Use 'result' to get structured JSON output
+  - Use 'progress' to check real-time status and findings
 `;
 
 interface Options {
@@ -93,6 +104,8 @@ interface Options {
   dryRun: boolean;
   stripAnsi: boolean;
   json: boolean;
+  protocol: boolean;
+  timeout: number;
 }
 
 function parseArgs(args: string[]): {
@@ -112,6 +125,8 @@ function parseArgs(args: string[]): {
     dryRun: false,
     stripAnsi: false,
     json: false,
+    protocol: false,
+    timeout: 300,
   };
 
   const positional: string[] = [];
@@ -181,6 +196,16 @@ function parseArgs(args: string[]): {
       options.stripAnsi = true;
     } else if (arg === "--json") {
       options.json = true;
+    } else if (arg === "--protocol") {
+      options.protocol = true;
+    } else if (arg === "--timeout") {
+      const timeout = parseInt(args[++i], 10);
+      if (Number.isNaN(timeout) || timeout <= 0) {
+        console.error(`Error: Invalid timeout: ${args[i]}`);
+        console.error("Timeout must be a positive integer (seconds)");
+        process.exit(1);
+      }
+      options.timeout = timeout;
     } else if (!arg.startsWith("-")) {
       if (!command) {
         command = arg;
@@ -328,6 +353,8 @@ async function main() {
           parentSessionId: options.parentSessionId ?? undefined,
           cwd: options.dir,
           authToken,
+          useProtocol: options.protocol,
+          contextFiles: options.files,
         });
 
         console.log(`Job started: ${job.id}`);
@@ -655,6 +682,167 @@ async function main() {
           console.log(`Deleted job: ${positional[0]}`);
         } else {
           console.error(`Could not delete job: ${positional[0]}`);
+          process.exit(1);
+        }
+        break;
+      }
+
+      case "result": {
+        if (positional.length === 0) {
+          console.error("Error: No job ID provided");
+          process.exit(1);
+        }
+
+        const result = getJobResult(positional[0]);
+        if (result) {
+          console.log(JSON.stringify(result, null, 2));
+        } else {
+          console.error(`Could not get result for job ${positional[0]}`);
+          process.exit(1);
+        }
+        break;
+      }
+
+      case "progress": {
+        if (positional.length === 0) {
+          console.error("Error: No job ID provided");
+          process.exit(1);
+        }
+
+        const job = refreshJobStatus(positional[0]);
+        if (!job) {
+          console.error(`Job ${positional[0]} not found`);
+          process.exit(1);
+        }
+
+        const progress = getJobProgress(positional[0]);
+        if (options.json) {
+          console.log(JSON.stringify({
+            job_id: job.id,
+            job_status: job.status,
+            ...progress,
+          }, null, 2));
+        } else {
+          console.log(`Job: ${job.id}`);
+          console.log(`Status: ${job.status}`);
+          if (progress) {
+            if (progress.status) console.log(`Agent status: ${progress.status}`);
+            if (progress.progress !== null) console.log(`Progress: ${progress.progress}%`);
+            if (progress.findings.length > 0) {
+              console.log(`Findings: ${progress.findings.length}`);
+              for (const finding of progress.findings) {
+                const loc = finding.file ? ` (${finding.file}${finding.line ? `:${finding.line}` : ""})` : "";
+                console.log(`  [${finding.severity}]${loc} ${finding.issue}`);
+              }
+            }
+          }
+        }
+        break;
+      }
+
+      case "wait": {
+        if (positional.length === 0) {
+          console.error("Error: No job ID provided");
+          process.exit(1);
+        }
+
+        let timeoutSec = options.timeout;
+        if (positional[1]) {
+          const parsed = parseInt(positional[1], 10);
+          if (Number.isNaN(parsed) || parsed <= 0) {
+            console.error(`Error: Invalid timeout: ${positional[1]}`);
+            process.exit(1);
+          }
+          timeoutSec = parsed;
+        }
+
+        console.error(`Waiting for job ${positional[0]} (timeout: ${timeoutSec}s)...`);
+        const completedJob = await waitForJob(positional[0], timeoutSec * 1000);
+
+        if (!completedJob) {
+          console.error(`Job ${positional[0]} not found`);
+          process.exit(1);
+        }
+
+        if (completedJob.status === "running") {
+          console.error(`Timeout: job still running after ${timeoutSec}s`);
+          process.exit(1);
+        }
+
+        console.log(`Job ${completedJob.status}: ${completedJob.id}`);
+        if (options.json) {
+          const result = getJobResult(completedJob.id);
+          console.log(JSON.stringify(result, null, 2));
+        }
+        break;
+      }
+
+      case "run": {
+        if (positional.length === 0) {
+          console.error("Error: No prompt provided");
+          process.exit(1);
+        }
+
+        if (!isWindows) {
+          if (!isTmuxAvailable()) {
+            console.error("Error: tmux is required but not installed");
+            console.error(getTmuxInstallHint());
+            process.exit(1);
+          }
+        }
+
+        let prompt = positional.join(" ");
+
+        // Load file context if specified
+        if (options.files.length > 0) {
+          const files = await loadFiles(options.files, options.dir);
+          prompt = formatPromptWithFiles(prompt, files);
+          console.error(`Included ${files.length} files`);
+        }
+
+        // Include codebase map if requested
+        if (options.includeMap) {
+          const map = await loadCodebaseMap(options.dir);
+          if (map) {
+            prompt = `## Codebase Map\n\n${map}\n\n---\n\n${prompt}`;
+            console.error("Included codebase map");
+          }
+        }
+
+        const authToken = ensureAuthToken();
+        if (!authToken) {
+          console.error("Error: OpenAI OAuth token not found.");
+          console.error("Run: codex login");
+          process.exit(1);
+        }
+
+        console.error(`Starting job and waiting (timeout: ${options.timeout}s)...`);
+
+        const outcome = await startJobAndWait({
+          prompt,
+          model: options.model,
+          reasoningEffort: options.reasoning,
+          subagentReasoningEffort: options.subagentReasoning,
+          sandbox: options.sandbox,
+          parentSessionId: options.parentSessionId ?? undefined,
+          cwd: options.dir,
+          authToken,
+          useProtocol: true, // Always use protocol for run command
+          contextFiles: options.files,
+        }, options.timeout * 1000);
+
+        if (!outcome) {
+          console.error("Error: Job failed to start or timed out");
+          process.exit(1);
+        }
+
+        const { job, result } = outcome;
+        console.error(`Job ${job.status}: ${job.id}`);
+
+        if (result) {
+          console.log(JSON.stringify(result, null, 2));
+        } else if (job.error) {
+          console.error(`Error: ${job.error}`);
           process.exit(1);
         }
         break;

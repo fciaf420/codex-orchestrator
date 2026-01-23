@@ -1,12 +1,23 @@
 // Job management for async codex agent execution with tmux
 
-import { mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 import { spawn, spawnSync } from "child_process";
 import { join } from "path";
 import { config, ReasoningEffort, SandboxMode } from "./config.ts";
 import { randomBytes } from "crypto";
 import { extractSessionId, findSessionFile, parseSessionFile, type ParsedSessionData } from "./session-parser.ts";
 import { isValidJobId } from "./utils.ts";
+import {
+  type TaskEnvelope,
+  type ResultOutput,
+  type Finding,
+  parseAgentEvents,
+  extractFindingsFromEvents,
+  extractModifiedFiles,
+  isCompleteFromEvents,
+  generateProtocolInstructions,
+  createEmptyResult,
+} from "./protocol.ts";
 import {
   createSession,
   killSession,
@@ -202,35 +213,22 @@ export function deleteJob(jobId: string): boolean {
   try {
     unlinkSync(getJobPath(jobId));
     // Clean up associated files if they exist
-    try {
-      unlinkSync(join(config.jobsDir, `${jobId}.prompt`));
-    } catch {
-      // Prompt file may not exist
-    }
-    try {
-      unlinkSync(join(config.jobsDir, `${jobId}.log`));
-    } catch {
-      // Log file may not exist
-    }
-    try {
-      unlinkSync(join(config.jobsDir, `${jobId}.runner.cjs`));
-    } catch {
-      // Runner file may not exist
-    }
-    try {
-      unlinkSync(join(config.jobsDir, `${jobId}.runner.json`));
-    } catch {
-      // Runner config may not exist
-    }
-    try {
-      unlinkSync(join(config.jobsDir, `${jobId}.ps1`));
-    } catch {
-      // Legacy script file may not exist
-    }
-    try {
-      unlinkSync(join(config.jobsDir, `${jobId}.done.json`));
-    } catch {
-      // Done file may not exist
+    const filesToClean = [
+      `${jobId}.prompt`,
+      `${jobId}.log`,
+      `${jobId}.runner.cjs`,
+      `${jobId}.runner.json`,
+      `${jobId}.ps1`,
+      `${jobId}.done.json`,
+      `${jobId}.task.json`,
+      `${jobId}.result.json`,
+    ];
+    for (const file of filesToClean) {
+      try {
+        unlinkSync(join(config.jobsDir, file));
+      } catch {
+        // File may not exist
+      }
     }
     return true;
   } catch {
@@ -247,6 +245,9 @@ export interface StartJobOptions {
   parentSessionId?: string;
   cwd?: string;
   authToken?: string;
+  // Protocol options
+  useProtocol?: boolean;
+  contextFiles?: string[];
 }
 
 function buildCodexArgs(options: {
@@ -448,10 +449,32 @@ export function startJob(options: StartJobOptions): Job {
   const jobId = generateJobId();
   const cwd = options.cwd || process.cwd();
 
+  // Build the prompt, optionally with protocol instructions
+  let finalPrompt = options.prompt;
+  const resultPath = join(config.jobsDir, `${jobId}.result.json`);
+
+  if (options.useProtocol) {
+    const taskEnvelope: TaskEnvelope = {
+      task_id: jobId,
+      parent_session: options.parentSessionId,
+      objective: options.prompt,
+      context_files: options.contextFiles || [],
+      report_to: resultPath,
+      created_at: new Date().toISOString(),
+    };
+
+    // Write task envelope
+    const taskEnvelopePath = join(config.jobsDir, `${jobId}.task.json`);
+    writeFileSync(taskEnvelopePath, JSON.stringify(taskEnvelope, null, 2), { mode: 0o600 });
+
+    // Prepend protocol instructions to prompt
+    finalPrompt = generateProtocolInstructions(taskEnvelope) + options.prompt;
+  }
+
   const job: Job = {
     id: jobId,
     status: "pending",
-    prompt: options.prompt,
+    prompt: options.prompt, // Store original prompt
     model: options.model || config.model,
     reasoningEffort: options.reasoningEffort || config.defaultReasoningEffort,
     subagentReasoningEffort:
@@ -467,7 +490,7 @@ export function startJob(options: StartJobOptions): Job {
   if (isWindows()) {
     const result = startNativeSession({
       jobId,
-      prompt: options.prompt,
+      prompt: finalPrompt,
       model: job.model,
       reasoningEffort: job.reasoningEffort,
       subagentReasoningEffort:
@@ -492,7 +515,7 @@ export function startJob(options: StartJobOptions): Job {
     // Create tmux session with codex
     const result = createSession({
       jobId,
-      prompt: options.prompt,
+      prompt: finalPrompt,
       model: job.model,
       reasoningEffort: job.reasoningEffort,
       subagentReasoningEffort:
@@ -695,4 +718,192 @@ export function getAttachCommand(jobId: string): string | null {
 
   if (!job.tmuxSession) return null;
   return `tmux attach -t "${job.tmuxSession}"`;
+}
+
+// ============================================================================
+// Protocol-based Result Functions
+// ============================================================================
+
+/**
+ * Generate a structured result from job output by parsing agent events
+ */
+export function generateJobResult(jobId: string): ResultOutput | null {
+  if (!isValidJobId(jobId)) return null;
+  const job = loadJob(jobId);
+  if (!job) return null;
+
+  const output = getJobFullOutput(jobId);
+  if (!output) {
+    return createEmptyResult(jobId);
+  }
+
+  // Parse events from output
+  const events = parseAgentEvents(output);
+  const findings = extractFindingsFromEvents(events);
+  const filesModified = extractModifiedFiles(events);
+  const completion = isCompleteFromEvents(events);
+
+  // Try to get tokens from session data
+  let tokensUsed: ResultOutput["tokens_used"] = null;
+  const sessionData = loadSessionData(jobId);
+  if (sessionData?.tokens) {
+    tokensUsed = {
+      input: sessionData.tokens.input,
+      output: sessionData.tokens.output,
+    };
+  }
+
+  // Merge files_modified from session data if not found in events
+  const allFilesModified = filesModified.length > 0
+    ? filesModified
+    : sessionData?.files_modified || [];
+
+  // Use session summary if no events provided one
+  const summary = sessionData?.summary || (findings.length > 0
+    ? `Found ${findings.length} issue(s)`
+    : "No findings");
+
+  const result: ResultOutput = {
+    task_id: jobId,
+    status: completion.complete
+      ? (completion.success ? "completed" : "failed")
+      : (job.status === "completed" ? "completed" : "partial"),
+    findings,
+    files_modified: allFilesModified,
+    summary,
+    tokens_used: tokensUsed,
+    completed_at: job.completedAt || new Date().toISOString(),
+    error: job.error,
+  };
+
+  // Save result to file
+  const resultPath = join(config.jobsDir, `${jobId}.result.json`);
+  writeFileSync(resultPath, JSON.stringify(result, null, 2), { mode: 0o600 });
+
+  return result;
+}
+
+/**
+ * Get the structured result for a job
+ * Returns cached result if available, otherwise generates it
+ */
+export function getJobResult(jobId: string): ResultOutput | null {
+  if (!isValidJobId(jobId)) return null;
+
+  const resultPath = join(config.jobsDir, `${jobId}.result.json`);
+
+  // Try to load cached result
+  if (existsSync(resultPath)) {
+    try {
+      const content = readFileSync(resultPath, "utf-8");
+      return JSON.parse(content) as ResultOutput;
+    } catch {
+      // Fall through to regenerate
+    }
+  }
+
+  // Generate result from output
+  return generateJobResult(jobId);
+}
+
+/**
+ * Wait for a job to complete
+ * @param jobId - Job ID to wait for
+ * @param timeoutMs - Maximum time to wait in milliseconds (default: 5 minutes)
+ * @param pollIntervalMs - How often to check status (default: 1 second)
+ * @returns The completed job, or null if timeout or not found
+ */
+export async function waitForJob(
+  jobId: string,
+  timeoutMs: number = 300000,
+  pollIntervalMs: number = 1000
+): Promise<Job | null> {
+  if (!isValidJobId(jobId)) return null;
+
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeoutMs) {
+    const job = refreshJobStatus(jobId);
+    if (!job) return null;
+
+    if (job.status === "completed" || job.status === "failed") {
+      // Generate result on completion
+      generateJobResult(jobId);
+      return job;
+    }
+
+    // Wait before next poll
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+
+  // Timeout - return current state
+  return loadJob(jobId);
+}
+
+/**
+ * Start a job and wait for it to complete
+ * @param options - Job options
+ * @param timeoutMs - Maximum time to wait (default: 5 minutes)
+ * @returns Object with job and result, or null if failed
+ */
+export async function startJobAndWait(
+  options: StartJobOptions,
+  timeoutMs: number = 300000
+): Promise<{ job: Job; result: ResultOutput | null } | null> {
+  // Enable protocol by default for spawn-and-wait
+  const jobOptions: StartJobOptions = {
+    ...options,
+    useProtocol: options.useProtocol !== false,
+  };
+
+  const job = startJob(jobOptions);
+  if (job.status === "failed") {
+    return { job, result: null };
+  }
+
+  const completedJob = await waitForJob(job.id, timeoutMs);
+  if (!completedJob) {
+    return null;
+  }
+
+  const result = getJobResult(completedJob.id);
+  return { job: completedJob, result };
+}
+
+/**
+ * Get job progress from events
+ * @returns Progress info or null if not available
+ */
+export function getJobProgress(jobId: string): {
+  status: string | null;
+  progress: number | null;
+  findings: Finding[];
+} | null {
+  if (!isValidJobId(jobId)) return null;
+
+  const output = getJobOutput(jobId, 100);
+  if (!output) return null;
+
+  const events = parseAgentEvents(output);
+
+  // Get latest status
+  let status: string | null = null;
+  let progress: number | null = null;
+
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (!status && events[i].type === "STATUS") {
+      status = events[i].payload;
+    }
+    if (progress === null && events[i].type === "PROGRESS") {
+      const match = events[i].payload.match(/(\d+)/);
+      if (match) {
+        progress = parseInt(match[1], 10);
+      }
+    }
+    if (status && progress !== null) break;
+  }
+
+  const findings = extractFindingsFromEvents(events);
+
+  return { status, progress, findings };
 }
