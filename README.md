@@ -55,11 +55,15 @@ irm https://raw.githubusercontent.com/fciaf420/codex-orchestrator/main/install-r
 
 Install these first:
 
-| Dependency | macOS | Linux/WSL | Windows |
-|------------|-------|-----------|---------|
-| Bun | `curl -fsSL https://bun.sh/install \| bash` | same | [bun.sh](https://bun.sh) |
-| tmux | `brew install tmux` | `apt install tmux` | N/A (WSL only) |
+| Dependency | macOS | Linux/WSL | Windows (PowerShell) |
+|------------|-------|-----------|----------------------|
+| Bun | `curl -fsSL https://bun.sh/install \| bash` | same | `irm bun.sh/install.ps1 \| iex` |
+| tmux | `brew install tmux` | `apt install tmux` | Not needed* |
 | Codex CLI | `npm install -g @openai/codex` | same | same |
+
+*\*Windows native mode works without tmux but the `send` command (redirecting agents mid-task) is disabled. Use WSL for full functionality.*
+
+> **Note:** The install scripts auto-detect bun in common locations (`~/.bun/bin`) even if it's not in your PATH.
 
 ### Uninstall
 
