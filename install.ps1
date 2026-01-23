@@ -13,13 +13,40 @@ Write-Host ""
 # Check dependencies
 Write-Host "Checking dependencies..." -ForegroundColor Yellow
 
-# Check Bun
+# Check Bun (with fallback to common install locations)
+$bunFound = $false
 try {
     $bunVersion = bun --version 2>$null
-    Write-Host "  bun: $bunVersion" -ForegroundColor Green
-} catch {
+    if ($bunVersion) {
+        $bunFound = $true
+        Write-Host "  bun: $bunVersion" -ForegroundColor Green
+    }
+} catch {}
+
+if (-not $bunFound) {
+    # Check common bun install locations
+    $bunPaths = @(
+        "$env:USERPROFILE\.bun\bin",
+        "$env:BUN_INSTALL\bin",
+        "$env:LOCALAPPDATA\bun\bin"
+    )
+    foreach ($bunPath in $bunPaths) {
+        $bunExe = Join-Path $bunPath "bun.exe"
+        if (Test-Path $bunExe) {
+            Write-Host "  bun: Found at $bunPath (adding to PATH)" -ForegroundColor Yellow
+            $env:PATH += ";$bunPath"
+            $bunVersion = & $bunExe --version 2>$null
+            Write-Host "  bun: $bunVersion" -ForegroundColor Green
+            $bunFound = $true
+            break
+        }
+    }
+}
+
+if (-not $bunFound) {
     Write-Host "  bun: NOT FOUND" -ForegroundColor Red
     Write-Host "  Install from: https://bun.sh/docs/installation" -ForegroundColor Yellow
+    Write-Host "  Then restart your terminal and try again" -ForegroundColor Yellow
     exit 1
 }
 
