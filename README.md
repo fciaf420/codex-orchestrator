@@ -12,6 +12,7 @@ Delegate tasks to OpenAI Codex agents via tmux sessions. Designed for Claude Cod
 ```bash
 npx codex-orchestrator
 ```
+Installs the CLI and Claude Code skill globally.
 
 **macOS / Linux / WSL:**
 ```bash
