@@ -2,8 +2,8 @@
 set -e
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
-SKILL_SOURCE="$REPO_DIR/.claude/commands/codex-agent"
-SKILL_DEST="$HOME/.claude/commands/codex-agent"
+SKILL_SOURCE="$REPO_DIR/.claude/skills/codex-agent"
+SKILL_DEST="$HOME/.claude/skills/codex-agent"
 BIN_SOURCE="$REPO_DIR/bin/codex-agent"
 BIN_DEST="/usr/local/bin/codex-agent"
 
@@ -52,7 +52,7 @@ fi
 
 # Install Claude skill globally (folder structure)
 echo "Installing Claude skill to $SKILL_DEST..."
-mkdir -p "$HOME/.claude/commands"
+mkdir -p "$HOME/.claude/skills"
 rm -rf "$SKILL_DEST"
 cp -r "$SKILL_SOURCE" "$SKILL_DEST"
 

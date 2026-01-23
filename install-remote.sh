@@ -6,7 +6,7 @@ set -e
 REPO="fciaf420/codex-orchestrator"
 BRANCH="main"
 INSTALL_DIR="$HOME/.codex-orchestrator"
-SKILL_DIR="$HOME/.claude/commands/codex-agent"
+SKILL_DIR="$HOME/.claude/skills/codex-agent"
 
 echo "Installing codex-orchestrator..."
 echo ""
@@ -60,16 +60,16 @@ chmod +x "$HOME/.local/bin/codex-agent"
 
 # Install Claude skill (folder structure)
 echo "Installing Claude Code skill..."
-mkdir -p "$HOME/.claude/commands"
+mkdir -p "$HOME/.claude/skills"
 rm -rf "$SKILL_DIR"
-cp -r "$INSTALL_DIR/.claude/commands/codex-agent" "$SKILL_DIR"
+cp -r "$INSTALL_DIR/.claude/skills/codex-agent" "$SKILL_DIR"
 
 echo ""
 echo "Installation complete!"
 echo ""
 echo "Installed:"
 echo "  CLI:   ~/.local/bin/codex-agent"
-echo "  Skill: ~/.claude/commands/codex-agent/SKILL.md"
+echo "  Skill: ~/.claude/skills/codex-agent/SKILL.md (global)"
 echo ""
 
 # Add to PATH if needed

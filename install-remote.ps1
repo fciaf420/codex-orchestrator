@@ -5,7 +5,7 @@ $ErrorActionPreference = "Stop"
 $Repo = "fciaf420/codex-orchestrator"
 $Branch = "main"
 $InstallDir = Join-Path $env:USERPROFILE ".codex-orchestrator"
-$SkillDir = Join-Path $env:USERPROFILE ".claude\commands\codex-agent"
+$SkillDir = Join-Path $env:USERPROFILE ".claude\skills\codex-agent"
 $BinDir = Join-Path $env:USERPROFILE ".local\bin"
 
 Write-Host "Installing codex-orchestrator..." -ForegroundColor Cyan
@@ -77,17 +77,17 @@ if ($UserPath -notlike "*$BinDir*") {
 
 # Install Claude skill (folder structure)
 Write-Host "Installing Claude Code skill..." -ForegroundColor Yellow
-$CommandsDir = Join-Path $env:USERPROFILE ".claude\commands"
-if (-not (Test-Path $CommandsDir)) { New-Item -ItemType Directory -Path $CommandsDir -Force | Out-Null }
+$SkillsDir = Join-Path $env:USERPROFILE ".claude\skills"
+if (-not (Test-Path $SkillsDir)) { New-Item -ItemType Directory -Path $SkillsDir -Force | Out-Null }
 if (Test-Path $SkillDir) { Remove-Item -Recurse -Force $SkillDir }
-Copy-Item -Path (Join-Path $InstallDir ".claude\commands\codex-agent") -Destination $SkillDir -Recurse
+Copy-Item -Path (Join-Path $InstallDir ".claude\skills\codex-agent") -Destination $SkillDir -Recurse
 
 Write-Host ""
 Write-Host "Installation complete!" -ForegroundColor Green
 Write-Host ""
 Write-Host "Installed:" -ForegroundColor Cyan
 Write-Host "  CLI:   $WrapperPath"
-Write-Host "  Skill: $SkillDir\SKILL.md"
+Write-Host "  Skill: $SkillDir\SKILL.md (global)"
 Write-Host ""
 Write-Host "IMPORTANT: Restart your terminal, then run:" -ForegroundColor Yellow
 Write-Host "  codex-agent health" -ForegroundColor White

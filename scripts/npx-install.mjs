@@ -23,7 +23,7 @@ const INSTALL_DIR = IS_WINDOWS
   ? join(HOME, ".codex-orchestrator")
   : join(HOME, ".codex-orchestrator");
 
-const SKILL_DIR = join(HOME, ".claude", "commands", "codex-agent");
+const SKILL_DIR = join(HOME, ".claude", "skills", "codex-agent");
 const LOCAL_BIN = join(HOME, ".local", "bin");
 
 function log(msg) {
@@ -238,8 +238,8 @@ function setupCli() {
 function installSkill() {
   log("Installing Claude Code skill...");
 
-  const skillSource = join(INSTALL_DIR, ".claude", "commands", "codex-agent");
-  mkdirSync(join(HOME, ".claude", "commands"), { recursive: true });
+  const skillSource = join(INSTALL_DIR, ".claude", "skills", "codex-agent");
+  mkdirSync(join(HOME, ".claude", "skills"), { recursive: true });
 
   if (existsSync(SKILL_DIR)) {
     rmSync(SKILL_DIR, { recursive: true, force: true });
