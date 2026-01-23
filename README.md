@@ -8,6 +8,11 @@ Delegate tasks to OpenAI Codex agents via tmux sessions. Designed for Claude Cod
 
 ## Install
 
+**Via npx (recommended):**
+```bash
+npx codex-orchestrator
+```
+
 **macOS / Linux / WSL:**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/fciaf420/codex-orchestrator/main/install-remote.sh | bash
