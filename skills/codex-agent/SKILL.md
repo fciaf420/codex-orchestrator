@@ -47,6 +47,28 @@ codex-agent health                       # Check dependencies
 
 **Platform:** Windows native disables `send` (no tmux). Use WSL for interactive sessions.
 
+## Platform Detection
+
+Claude Code's Bash tool on Windows runs in an isolated environment that may not inherit the user's PATH. Check your environment context for `Platform: win32` to determine command format.
+
+**Windows (Platform: win32):** Wrap all commands with PowerShell:
+```bash
+powershell -Command "codex-agent health"
+powershell -Command "codex-agent start 'your task' --map"
+powershell -Command "codex-agent jobs --json"
+powershell -Command "codex-agent status abc123"
+powershell -Command "codex-agent output abc123 --strip-ansi"
+```
+
+Note: Use single quotes inside the PowerShell command string for task prompts.
+
+**Unix/macOS/WSL:** Use commands directly:
+```bash
+codex-agent health
+codex-agent start "your task" --map
+codex-agent jobs --json
+```
+
 ## Single Agent Workflow
 
 ```bash
