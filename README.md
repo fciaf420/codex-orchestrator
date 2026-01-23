@@ -8,10 +8,21 @@ Delegate tasks to OpenAI Codex agents via tmux sessions. Designed for Claude Cod
 
 ## Install
 
-**Via npx (recommended):**
+### Claude Code Plugin (Recommended)
+
+Install as a Claude Code plugin to get the `/codex-agent` skill globally:
+
 ```bash
-npx codex-orchestrator
+claude plugins install github:fciaf420/codex-orchestrator
 ```
+
+This installs:
+- `/codex-agent` skill available in any Claude Code session
+- `codex-agent` CLI to `~/.local/bin/`
+
+### Manual Installation
+
+If you prefer to install manually without the Claude Code plugin system:
 
 **macOS / Linux / WSL:**
 ```bash
@@ -22,10 +33,6 @@ curl -fsSL https://raw.githubusercontent.com/fciaf420/codex-orchestrator/main/in
 ```powershell
 irm https://raw.githubusercontent.com/fciaf420/codex-orchestrator/main/install-remote.ps1 | iex
 ```
-
-This installs:
-- `codex-agent` CLI to `~/.local/bin/`
-- `/codex-agent` skill to `~/.claude/commands/`
 
 ### Prerequisites
 
@@ -39,6 +46,12 @@ Install these first:
 
 ### Uninstall
 
+**Claude Code Plugin:**
+```bash
+claude plugins uninstall codex-orchestrator
+```
+
+**Manual Installation:**
 ```bash
 # Unix
 curl -fsSL https://raw.githubusercontent.com/fciaf420/codex-orchestrator/main/uninstall-remote.sh | bash
@@ -61,6 +74,12 @@ When you're working with Claude Code and need parallel execution, investigation 
 
 ## Quick Start
 
+**In Claude Code (after plugin install):**
+```
+/codex-agent
+```
+
+**Or via CLI:**
 ```bash
 # Start an agent
 codex-agent start "Review this codebase for security vulnerabilities" --map

@@ -1,0 +1,14 @@
+{
+  "name": "codex-orchestrator",
+  "version": "1.0.0",
+  "description": "Delegate tasks to OpenAI Codex agents via tmux sessions. Designed for Claude Code orchestration.",
+  "author": "fciaf420",
+  "repository": "https://github.com/fciaf420/codex-orchestrator",
+  "skills": [
+    "codex-agent"
+  ],
+  "postInstall": {
+    "windows": "powershell -ExecutionPolicy Bypass -File ./install.ps1",
+    "unix": "bash ./install.sh"
+  }
+}

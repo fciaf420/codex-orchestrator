@@ -1,13 +1,15 @@
 #!/bin/bash
+# Unix installer for codex-orchestrator CLI
+# This script is called automatically by Claude Code plugin install
+# Or run manually: ./install.sh
+
 set -e
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
-SKILL_SOURCE="$REPO_DIR/.claude/skills/codex-agent"
-SKILL_DEST="$HOME/.claude/skills/codex-agent"
 BIN_SOURCE="$REPO_DIR/bin/codex-agent"
-BIN_DEST="/usr/local/bin/codex-agent"
+BIN_DEST="$HOME/.local/bin/codex-agent"
 
-echo "Installing codex-orchestrator..."
+echo "Installing codex-orchestrator CLI..."
 echo ""
 
 # Check dependencies
@@ -39,32 +41,28 @@ echo ""
 # Install npm dependencies
 echo "Installing dependencies..."
 cd "$REPO_DIR"
-bun install
+bun install --silent
 
-# Install CLI globally
+# Create bin directory if needed
+mkdir -p "$HOME/.local/bin"
+
+# Install CLI
 echo ""
 echo "Installing CLI to $BIN_DEST..."
-if [ -w /usr/local/bin ]; then
-    ln -sf "$BIN_SOURCE" "$BIN_DEST"
-else
-    sudo ln -sf "$BIN_SOURCE" "$BIN_DEST"
+ln -sf "$BIN_SOURCE" "$BIN_DEST"
+
+# Check if ~/.local/bin is in PATH
+if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+    echo ""
+    echo "NOTE: Add ~/.local/bin to your PATH by adding this to your shell rc file:"
+    echo '  export PATH="$HOME/.local/bin:$PATH"'
 fi
 
-# Install Claude skill globally (folder structure)
-echo "Installing Claude skill to $SKILL_DEST..."
-mkdir -p "$HOME/.claude/skills"
-rm -rf "$SKILL_DEST"
-cp -r "$SKILL_SOURCE" "$SKILL_DEST"
-
 echo ""
-echo "Installation complete!"
-echo ""
-echo "Installed:"
-echo "  CLI:   $BIN_DEST"
-echo "  Skill: $SKILL_DEST/SKILL.md"
+echo "CLI installation complete!"
 echo ""
 echo "Usage:"
 echo "  CLI:   codex-agent start \"your task\" --map"
-echo "  Skill: /codex-agent in Claude Code (any repo)"
+echo "  Skill: /codex-agent in Claude Code (any project)"
 echo ""
 echo "Run 'codex-agent health' to verify installation."
