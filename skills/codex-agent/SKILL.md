@@ -12,12 +12,12 @@ After installing this plugin, you must manually install the CLI tool:
 
 **macOS / Linux / WSL:**
 ```bash
-cd ~/.claude/plugins/codex-orchestrator && ./install.sh
+cd ~/.claude/plugins/marketplaces/codex-orchestrator && ./install.sh
 ```
 
 **Windows (PowerShell):**
 ```powershell
-cd $env:USERPROFILE\.claude\plugins\codex-orchestrator; .\install.ps1
+cd $env:USERPROFILE\.claude\plugins\marketplaces\codex-orchestrator; .\install.ps1
 ```
 
 **Verify installation:**

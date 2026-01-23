@@ -13,19 +13,23 @@ Delegate tasks to OpenAI Codex agents via tmux sessions. Designed for Claude Cod
 Install as a Claude Code plugin to get the `/codex-agent` skill:
 
 ```bash
-claude plugins install github:fciaf420/codex-orchestrator
+# Step 1: Add the marketplace
+claude plugin marketplace add fciaf420/codex-orchestrator
+
+# Step 2: Install the plugin
+claude plugin install codex-orchestrator
 ```
 
 **After plugin install, you must manually install the CLI:**
 
 **macOS / Linux / WSL:**
 ```bash
-cd ~/.claude/plugins/codex-orchestrator && ./install.sh
+cd ~/.claude/plugins/marketplaces/codex-orchestrator && ./install.sh
 ```
 
 **Windows (PowerShell):**
 ```powershell
-cd $env:USERPROFILE\.claude\plugins\codex-orchestrator; .\install.ps1
+cd $env:USERPROFILE\.claude\plugins\marketplaces\codex-orchestrator; .\install.ps1
 ```
 
 **Verify installation:**
@@ -61,7 +65,8 @@ Install these first:
 
 **Claude Code Plugin:**
 ```bash
-claude plugins uninstall codex-orchestrator
+claude plugin uninstall codex-orchestrator
+claude plugin marketplace remove codex-orchestrator
 ```
 
 **Standalone Installation:**
