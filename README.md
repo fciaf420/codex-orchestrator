@@ -65,6 +65,36 @@ Install these first:
 
 > **Note:** The install scripts auto-detect bun in common locations (`~/.bun/bin`) even if it's not in your PATH.
 
+### Update
+
+> **How to know when updates are available:** [Watch this repo](https://github.com/fciaf420/codex-orchestrator) on GitHub (Watch -> Custom -> Releases) to get notified of new versions.
+
+**Claude Code Plugin:**
+```bash
+# Update marketplace and plugin in one go, then re-run install script
+claude plugin marketplace update codex-orchestrator && claude plugin update codex-orchestrator
+
+# Restart Claude Code (required to apply plugin changes)
+
+# Then update the CLI:
+# macOS / Linux / WSL:
+cd ~/.claude/plugins/marketplaces/codex-orchestrator && ./install.sh
+
+# Windows (PowerShell):
+cd $env:USERPROFILE\.claude\plugins\marketplaces\codex-orchestrator; .\install.ps1
+```
+
+**Standalone Installation:**
+```bash
+# Just re-run the install script - it pulls the latest from GitHub
+
+# Unix
+curl -fsSL https://raw.githubusercontent.com/fciaf420/codex-orchestrator/main/install-remote.sh | bash
+
+# Windows
+irm https://raw.githubusercontent.com/fciaf420/codex-orchestrator/main/install-remote.ps1 | iex
+```
+
 ### Uninstall
 
 **Claude Code Plugin:**
