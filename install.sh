@@ -71,6 +71,22 @@ if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
     echo '  export PATH="$HOME/.local/bin:$PATH"'
 fi
 
+# Create hash marker for auto-update detection
+MARKER_DIR="$HOME/.codex-agent"
+MARKER_FILE="$MARKER_DIR/installed-hash"
+mkdir -p "$MARKER_DIR"
+
+# Compute hash of source files
+if command -v sha256sum &> /dev/null; then
+    HASH=$(find "$REPO_DIR/src" -name "*.ts" -type f 2>/dev/null | sort | xargs cat 2>/dev/null | sha256sum | cut -d' ' -f1)
+elif command -v shasum &> /dev/null; then
+    HASH=$(find "$REPO_DIR/src" -name "*.ts" -type f 2>/dev/null | sort | xargs cat 2>/dev/null | shasum -a 256 | cut -d' ' -f1)
+else
+    HASH=$(date +%s)
+fi
+echo "$HASH" > "$MARKER_FILE"
+echo "  Created update marker: $MARKER_FILE"
+
 echo ""
 echo "CLI installation complete!"
 echo ""

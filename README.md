@@ -78,14 +78,12 @@ Claude Code can automatically update plugins at startup. To enable:
 
 When updates are detected, you'll get a notification to restart Claude Code.
 
-> **Note:** After plugin updates, re-run the install script to update the CLI tool:
-> - **macOS/Linux/WSL:** `cd ~/.claude/plugins/marketplaces/codex-orchestrator && ./install.sh`
-> - **Windows:** `cd $env:USERPROFILE\.claude\plugins\marketplaces\codex-orchestrator; .\install.ps1`
+**CLI auto-update:** The plugin includes a SessionStart hook that automatically reinstalls the CLI when source files change. After enabling marketplace auto-updates, both the plugin files AND the CLI binary will stay up to date automatically.
 
 **Manual update:**
 ```bash
 claude plugin marketplace update codex-orchestrator && claude plugin update codex-orchestrator
-# Then restart Claude Code and re-run install script (see above)
+# Then restart Claude Code - CLI will auto-update on next session
 ```
 
 **Standalone installation:**

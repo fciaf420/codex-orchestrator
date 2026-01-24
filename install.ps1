@@ -97,6 +97,24 @@ if ($userPath -notlike "*$BinDir*") {
     Write-Host "  $BinDir already in PATH" -ForegroundColor Green
 }
 
+# Create hash marker for auto-update detection
+$MarkerDir = Join-Path $env:USERPROFILE ".codex-agent"
+$MarkerFile = Join-Path $MarkerDir "installed-hash"
+if (-not (Test-Path $MarkerDir)) {
+    New-Item -ItemType Directory -Path $MarkerDir -Force | Out-Null
+}
+
+# Compute hash of source files
+$srcFiles = Get-ChildItem -Path "$RepoDir\src" -Filter "*.ts" -Recurse | Sort-Object FullName
+$content = $srcFiles | ForEach-Object { Get-Content $_.FullName -Raw } | Out-String
+$hash = [System.BitConverter]::ToString(
+    [System.Security.Cryptography.SHA256]::Create().ComputeHash(
+        [System.Text.Encoding]::UTF8.GetBytes($content)
+    )
+).Replace("-", "").ToLower()
+Set-Content -Path $MarkerFile -Value $hash -NoNewline
+Write-Host "  Created update marker: $MarkerFile" -ForegroundColor Green
+
 Write-Host ""
 Write-Host "CLI installation complete!" -ForegroundColor Green
 Write-Host ""

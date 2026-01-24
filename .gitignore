@@ -18,3 +18,7 @@ dist/
 
 # Bun
 bun.lockb
+bun.lock
+
+# Claude Code local settings
+.claude/
