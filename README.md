@@ -67,26 +67,30 @@ Install these first:
 
 ### Update
 
-> **How to know when updates are available:** [Watch this repo](https://github.com/fciaf420/codex-orchestrator) on GitHub (Watch -> Custom -> Releases) to get notified of new versions.
+**Enable auto-updates (recommended):**
 
-**Claude Code Plugin:**
+Claude Code can automatically update plugins at startup. To enable:
+
+1. Run `/plugin` in Claude Code
+2. Go to the **Marketplaces** tab
+3. Select `codex-orchestrator`
+4. Choose **Enable auto-update**
+
+When updates are detected, you'll get a notification to restart Claude Code.
+
+> **Note:** After plugin updates, re-run the install script to update the CLI tool:
+> - **macOS/Linux/WSL:** `cd ~/.claude/plugins/marketplaces/codex-orchestrator && ./install.sh`
+> - **Windows:** `cd $env:USERPROFILE\.claude\plugins\marketplaces\codex-orchestrator; .\install.ps1`
+
+**Manual update:**
 ```bash
-# Update marketplace and plugin in one go, then re-run install script
 claude plugin marketplace update codex-orchestrator && claude plugin update codex-orchestrator
-
-# Restart Claude Code (required to apply plugin changes)
-
-# Then update the CLI:
-# macOS / Linux / WSL:
-cd ~/.claude/plugins/marketplaces/codex-orchestrator && ./install.sh
-
-# Windows (PowerShell):
-cd $env:USERPROFILE\.claude\plugins\marketplaces\codex-orchestrator; .\install.ps1
+# Then restart Claude Code and re-run install script (see above)
 ```
 
-**Standalone Installation:**
+**Standalone installation:**
 ```bash
-# Just re-run the install script - it pulls the latest from GitHub
+# Re-run the install script to pull latest from GitHub
 
 # Unix
 curl -fsSL https://raw.githubusercontent.com/fciaf420/codex-orchestrator/main/install-remote.sh | bash
