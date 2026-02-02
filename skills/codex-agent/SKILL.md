@@ -49,7 +49,7 @@ codex-agent health                       # Check dependencies
 
 ## Reasoning Prompt (Required)
 
-When invoking this skill, if the user has not specified a subagent reasoning level, ask a short question to confirm it (default to `medium`). Then pass the choice via `--subagent-reasoning <level>`.
+When invoking this skill, if the user has not specified a subagent reasoning level, ask a short question to confirm it (default to `high`). Then pass the choice via `--subagent-reasoning <level>`.
 
 ## Platform Detection
 
