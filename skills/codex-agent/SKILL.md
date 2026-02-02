@@ -43,9 +43,13 @@ codex-agent watch <jobId>                # Stream output
 codex-agent health                       # Check dependencies
 ```
 
-**Options:** `-r` reasoning (low/medium/high/xhigh), `-m` model, `-s` sandbox (read-only/workspace-write/danger-full-access), `-f` file glob, `-d` dir, `--map` codebase map, `--dry-run`
+**Options:** `-r` reasoning (low/medium/high/xhigh), `--subagent-reasoning` (low/medium/high/xhigh), `-m` model, `-s` sandbox (read-only/workspace-write/danger-full-access), `-f` file glob, `-d` dir, `--map` codebase map, `--dry-run`
 
 **Platform:** Windows native disables `send` (no tmux). Use WSL for interactive sessions.
+
+## Reasoning Prompt (Required)
+
+When invoking this skill, if the user has not specified a subagent reasoning level, ask a short question to confirm it (default to `medium`). Then pass the choice via `--subagent-reasoning <level>`.
 
 ## Platform Detection
 
@@ -87,6 +91,8 @@ codex-agent output <jobId> --strip-ansi
 | def456 | Audit api module | completed |
 
 Update this table after each step to track progress across turns.
+
+**Subagent reasoning:** When selected, add `--subagent-reasoning <level>` to each `codex-agent start` invocation.
 
 ### 1. Start Parallel Agents
 
