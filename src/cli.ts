@@ -54,7 +54,7 @@ Usage:
 
 Options:
   -r, --reasoning <level>    Reasoning effort: low, medium, high, xhigh (default: medium)
-  --subagent-reasoning <level>  Subagent reasoning effort: low, medium, high, xhigh (default: medium)
+  --subagent-reasoning <level>  Subagent reasoning effort: low, medium, high, xhigh (default: high)
   -m, --model <model>        Model name (default: gpt-5.2-codex)
   -s, --sandbox <mode>       Sandbox: read-only, workspace-write, danger-full-access
   -f, --file <glob>          Include files matching glob (can repeat)

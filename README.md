@@ -192,7 +192,7 @@ Get structured job data with `jobs --json`:
   "id": "8abfab85",
   "status": "completed",
   "elapsed_ms": 14897,
-  "subagent_reasoning": "medium",
+  "subagent_reasoning": "high",
   "tokens": {
     "input": 36581,
     "output": 282,
@@ -323,7 +323,7 @@ Default values in `src/config.ts`:
 |---------|---------|
 | Model | gpt-5.2-codex |
 | Reasoning effort | medium |
-| Subagent reasoning | medium |
+| Subagent reasoning | high |
 | Sandbox mode | workspace-write |
 | Jobs directory | ~/.codex-agent/jobs |
 | tmux prefix | codex-agent |
